@@ -14,6 +14,24 @@ import type { Observation } from "../schema/observation.js";
  * same concepts; `css` would be replaced by a control-index-path fallback.
  * Nothing above this seam would need to change.
  */
+/**
+ * Decides whether the session is permitted to navigate to a URL. Injected
+ * rather than imported so `src/surface` keeps no dependency on `src/safety`:
+ * policy sits *above* this seam, and a desktop Surface would enforce the
+ * same contract against its own navigation primitives. Structurally
+ * identical to the PolicyDecision returned by `checkNavigation`.
+ */
+export type NavigationGuard = (url: string) => { allowed: boolean; reason: string };
+
+export type PolicyViolation = { url: string; reason: string };
+
+export class PolicyViolationError extends Error {
+  constructor(readonly url: string, readonly reason: string) {
+    super(`navigation blocked by policy: ${url} (${reason})`);
+    this.name = "PolicyViolationError";
+  }
+}
+
 export interface Surface {
   observe(): Promise<Observation>;
   navigate(url: string): Promise<void>;
@@ -30,6 +48,13 @@ export interface Surface {
    * LocatorDescriptor — this is what gets written into an artifact step. */
   resolveElementToLocator(ref: string): LocatorDescriptor;
   lastResponseStatus(): number | undefined;
+  /**
+   * Read-and-clear: returns a navigation the policy guard blocked since the
+   * last call, if any. Callers drain this after every action, because a
+   * blocked *click* fails silently — the page simply stays put — so there is
+   * no exception for the orchestration layer to catch.
+   */
+  takePolicyViolation(): PolicyViolation | undefined;
   close(): Promise<void>;
 }
 

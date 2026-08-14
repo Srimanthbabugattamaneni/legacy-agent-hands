@@ -1,6 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
-import type { Surface } from "./types.js";
-import { ElementNotFoundError } from "./types.js";
+import type { Surface, NavigationGuard, PolicyViolation } from "./types.js";
+import { ElementNotFoundError, PolicyViolationError } from "./types.js";
 import type { LocatorDescriptor, LocatorStrategy } from "../schema/locator.js";
 import type { Observation } from "../schema/observation.js";
 import { collectInteractiveElements, type RawElementInfo } from "./domSnapshot.js";
@@ -23,8 +23,14 @@ function evalInPage<T>(page: Page, fn: () => T): Promise<T> {
 export class BrowserSurface implements Surface {
   private lastElements = new Map<string, RawElementInfo>();
   private lastStatus: number | undefined;
+  private violation: PolicyViolation | undefined;
 
-  private constructor(private browser: Browser, private context: BrowserContext, private page: Page) {
+  private constructor(
+    private browser: Browser,
+    private context: BrowserContext,
+    private page: Page,
+    private guard: NavigationGuard
+  ) {
     page.on("response", (res) => {
       if (res.request().resourceType() === "document") {
         this.lastStatus = res.status();
@@ -38,11 +44,56 @@ export class BrowserSurface implements Surface {
     });
   }
 
-  static async create(opts: { headless: boolean }): Promise<BrowserSurface> {
+  /**
+   * `guard` is required, deliberately. Making it optional (or defaulting it
+   * to allow-all) is how the allowlist came to cover only the navigations
+   * the orchestration layer happened to know about — any future caller that
+   * forgot to pass one would silently reopen that hole.
+   */
+  static async create(opts: { headless: boolean; guard: NavigationGuard }): Promise<BrowserSurface> {
     const browser = await chromium.launch({ headless: opts.headless });
     const context = await browser.newContext();
-    const page = await context.newPage();
-    return new BrowserSurface(browser, context, page);
+    const surface = new BrowserSurface(browser, context, await context.newPage(), opts.guard);
+    await surface.installNavigationGuard();
+    return surface;
+  }
+
+  /**
+   * Enforces the allowlist at the network layer, so the guarantee holds no
+   * matter how navigation was triggered — a declared navigate step, a click
+   * on a link, a form submission, or a JS redirect. Checking only at call
+   * sites the orchestrator controls (which is what this used to do) misses
+   * every one of those but the first.
+   *
+   * Only document navigations are gated. Subresources continue immediately:
+   * legacy vendor apps routinely pull CSS/images from another host, and
+   * blocking those would break pages for reasons unrelated to navigation.
+   * That leaves subresource egress ungated — an accepted limit, recorded in
+   * REPORT.md §6.
+   *
+   * Installed on the context before the first navigation, so it also
+   * constrains a human who takes over the live session during an escalation
+   * handoff. That is deliberate: the allowlist is a property of the
+   * automation session, not of the agent alone.
+   */
+  private async installNavigationGuard(): Promise<void> {
+    await this.context.route("**/*", (route) => {
+      const request = route.request();
+      if (!request.isNavigationRequest() || request.resourceType() !== "document") {
+        void route.continue();
+        return;
+      }
+      const url = request.url();
+      const decision = this.guard(url);
+      if (decision.allowed) {
+        void route.continue();
+        return;
+      }
+      // A blocked click produces no exception anywhere — the navigation just
+      // never happens — so record it for the caller to drain.
+      this.violation = { url, reason: decision.reason };
+      void route.abort();
+    });
   }
 
   /** Exposes the live Playwright Page for the escalation/operator handoff —
@@ -161,6 +212,13 @@ export class BrowserSurface implements Surface {
   }
 
   async navigate(url: string): Promise<void> {
+    // Pre-check so a declared navigation fails with a typed, explanatory
+    // error instead of the bare net::ERR_ABORTED the route handler would
+    // otherwise surface. The interceptor still backstops this.
+    const decision = this.guard(url);
+    if (!decision.allowed) {
+      throw new PolicyViolationError(url, decision.reason);
+    }
     await this.page.goto(url, { waitUntil: "domcontentloaded" });
   }
 
@@ -231,6 +289,25 @@ export class BrowserSurface implements Surface {
 
   lastResponseStatus(): number | undefined {
     return this.lastStatus;
+  }
+
+  takePolicyViolation(): PolicyViolation | undefined {
+    const recorded = this.violation;
+    this.violation = undefined;
+    if (recorded) return recorded;
+
+    // Same-document History API navigation (pushState/replaceState) never
+    // issues a request, so the interceptor cannot see it. Re-checking the
+    // settled URL catches that case.
+    const current = this.page.url();
+    // Blank/error pages are browser states, not navigations the session
+    // chose; flagging them would be a false positive (a fresh page sits on
+    // about:blank, and an aborted goto can land on chrome-error://).
+    if (!current || current === "about:blank" || current.startsWith("chrome-error://")) {
+      return undefined;
+    }
+    const decision = this.guard(current);
+    return decision.allowed ? undefined : { url: current, reason: decision.reason };
   }
 
   async close(): Promise<void> {

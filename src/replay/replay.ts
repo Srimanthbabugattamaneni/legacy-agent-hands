@@ -8,7 +8,7 @@ import { render } from "../util/template.js";
 import { RunLogger } from "../util/logger.js";
 import { slugify } from "../util/ids.js";
 import { createEscalation, waitForResolution } from "../escalation/escalate.js";
-import { ElementNotFoundError } from "../surface/types.js";
+import { ElementNotFoundError, PolicyViolationError } from "../surface/types.js";
 
 export type ReplayOptions = {
   artifact: CapabilityArtifact;
@@ -61,7 +61,10 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   }
 
   const headless = opts.headless ?? true;
-  const surface = await BrowserSurface.create({ headless });
+  // The guard enforces the allowlist at the network layer for the whole
+  // session, covering navigations this loop never initiates (clicks, form
+  // submits, redirects) as well as the ones it does.
+  const surface = await BrowserSurface.create({ headless, guard: (url) => checkNavigation(url) });
   const outcomeRules = loadBusinessOutcomes(artifact.target.appId);
   const outputs: Record<string, string | number | boolean> = {};
 
@@ -124,6 +127,25 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
       }
 
       const outcome = await runStepWithRetry(surface, step, params, outputs);
+
+      // Drained before any business-outcome matching, deliberately. A blocked
+      // click leaves the page exactly where it was, so a policy violation on
+      // e.g. the session-expired page would otherwise be reported as the
+      // "session_timeout" business outcome and the guardrail breach would
+      // never surface. A refused navigation is never a business result.
+      const violation = surface.takePolicyViolation();
+      if (violation) {
+        logger.log("policy_blocked", { stepId: step.id, url: violation.url, reason: violation.reason });
+        return finish({
+          ...base,
+          status: "failure",
+          errorClass: "policy_blocked",
+          stepId: step.id,
+          expected: "navigation stays within the allowlist",
+          observed: `blocked navigation to ${violation.url} (${violation.reason})`,
+          finishedAt: new Date().toISOString(),
+        });
+      }
 
       if (outcome.status === "hard_failure") {
         const pageText = (await surface.observe()).pageText;
@@ -280,6 +302,11 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   }
 
   function classify(err: unknown): { status: "hard_failure"; errorClass: ErrorClass; error: string } {
+    if (err instanceof PolicyViolationError) {
+      // A navigate step whose URL is outside the allowlist — the case a
+      // tampered or mis-recorded artifact produces.
+      return { status: "hard_failure", errorClass: "policy_blocked", error: err.message };
+    }
     if (err instanceof ElementNotFoundError) {
       return { status: "hard_failure", errorClass: "element_not_found", error: err.message };
     }

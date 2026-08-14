@@ -181,6 +181,122 @@ describe("replay of a compiled artifact honors its declared parameters", () => {
   }, 30000);
 });
 
+describe("allowlist enforcement covers navigation however it was triggered", () => {
+  // Enforcement used to live only at call sites the orchestrator controlled:
+  // checkNavigation ran on the entry URL and on discovery's navigate action,
+  // and nowhere else. So a navigate step in a (tampered) artifact and any
+  // click-driven navigation both escaped the allowlist entirely. It is now
+  // enforced at the network layer, which is what these three tests pin.
+  //
+  // The off-allowlist origin used here (localhost:4999) is deliberately not
+  // listening: if enforcement ever regresses, the test fails rather than
+  // silently making a real outbound request.
+  const OFF_ALLOWLIST_ORIGIN = "http://localhost:4999";
+
+  function artifact(steps: CapabilityArtifact["steps"], entryUrl: string): CapabilityArtifact {
+    return {
+      schemaVersion: "1.0",
+      id: "test-policy",
+      name: "test-policy",
+      version: 1,
+      description: "policy enforcement fixture",
+      goal: "policy enforcement fixture",
+      createdAt: new Date().toISOString(),
+      target: { appId: "mock-bank", entryUrl },
+      inputs: [],
+      outputs: [],
+      steps,
+      successCheckpoint: { description: "unreachable in these tests" },
+    };
+  }
+
+  it("blocks a navigate step pointing outside the allowlist (tampered artifact)", async () => {
+    const result = await replay({
+      artifact: artifact(
+        [
+          {
+            id: "s1",
+            action: "navigate",
+            description: "navigate off the allowlisted origin",
+            url: { kind: "literal", value: `${OFF_ALLOWLIST_ORIGIN}/partner-portal` },
+            risky: false,
+          },
+        ],
+        `${baseUrl}/`
+      ),
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("policy_blocked");
+      expect(result.stepId).toBe("s1");
+    }
+  }, 30000);
+
+  it("blocks a click onto a non-allowlisted route, and does not mask it as a business outcome", async () => {
+    // /login is reachable by clicking "Log In Again" on the session-expired
+    // page but matches no allowedRoutePattern. The page also carries the text
+    // that maps to the session_timeout business outcome, so this pins the
+    // precedence rule: a refused navigation is a guardrail breach, never a
+    // business result.
+    const result = await replay({
+      artifact: artifact(
+        [
+          {
+            id: "s1",
+            action: "click",
+            description: "click Log In Again",
+            locator: {
+              primary: { strategy: "role", role: "button", name: "Log In Again", nameMatch: "exact", nth: 0 },
+              fallbacks: [],
+            },
+            risky: false,
+          },
+        ],
+        `${baseUrl}/members/99999`
+      ),
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("policy_blocked");
+      expect(result.observed).toContain("/login");
+    }
+  }, 30000);
+
+  it("blocks a click onto a different origin", async () => {
+    const result = await replay({
+      artifact: artifact(
+        [
+          {
+            id: "s1",
+            action: "click",
+            description: "click the partner portal link",
+            locator: {
+              primary: { strategy: "role", role: "link", name: "Partner Credit Portal", nameMatch: "exact", nth: 0 },
+              fallbacks: [],
+            },
+            risky: false,
+          },
+        ],
+        `${baseUrl}/members/10234`
+      ),
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("policy_blocked");
+      expect(result.observed).toContain(OFF_ALLOWLIST_ORIGIN);
+    }
+  }, 30000);
+});
+
 describe("replay against the real mock-bank app", () => {
   it("succeeds for a known member and extracts the savings balance", async () => {
     const result = await replay({ artifact: lookupBalanceArtifact(), params: { memberId: "10234" }, headless: true });

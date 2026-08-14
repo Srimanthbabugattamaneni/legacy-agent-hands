@@ -228,11 +228,41 @@ process writes exactly once, at resolution.
 
 ## 6. Safety
 
-`src/safety/policy.ts` + `src/safety/allowlist.json`. Every navigation and every action, in both
-discovery and replay, passes through `checkNavigation` (origin + route regex allowlist) and
-`checkActionType` (action-type allowlist) before it's executed — enforced at the orchestration
-layer (agent loop / replay loop), not inside `Surface`, so the same check applies uniformly
-regardless of which surface implementation is underneath.
+`src/safety/policy.ts` + `src/safety/allowlist.json`. Action types are checked at the orchestration
+layer (`checkActionType`, agent loop / replay loop). **Navigation is enforced one layer lower, at
+the browser context**, via a `NavigationGuard` injected into the `Surface`
+(`src/surface/browserSurface.ts`): a `context.route` interceptor evaluates every document
+navigation against the origin + route allowlist and aborts the ones that fail.
+
+That split is the correction of a real bug, and the reasoning matters more than the fix. Both
+checks originally lived in the orchestration layer, which sounds uniform but silently is not:
+orchestration only sees the navigations *it initiates*. `checkNavigation` therefore ran on the
+entry URL and on discovery's `navigate` action — and nowhere else. Two holes followed. A `navigate`
+step in a replayed artifact went straight to `surface.navigate()` unchecked, so a tampered artifact
+(they are plain editable JSON) could send the session anywhere. And **click-driven navigation was
+never checked in either mode** — a link leaving the allowlisted origin, a form submit, or a JS
+redirect bypassed the guardrail entirely. That was not hypothetical: the demo app's session-expired
+page has a "Log In Again" button targeting `/login`, which matches no allowlisted route pattern.
+
+Enforcing at the network layer makes the guarantee independent of *how* navigation was triggered,
+which is the only version of it that actually holds. Two details this forces:
+
+- A blocked click throws nothing — the navigation simply never happens and the page sits still — so
+  `Surface.takePolicyViolation()` exposes a read-and-clear record that both loops drain after every
+  action. In replay this is checked **before** business-outcome matching, deliberately: an aborted
+  click leaves the page where it was, so the `/login` case would otherwise be reported as the
+  `session_timeout` business outcome and the breach would never surface. A refused navigation is
+  never a business result.
+- `Surface` takes the guard as an injected function rather than importing `src/safety`, so the seam
+  in §4 stays surface-agnostic — a desktop `Surface` would enforce the same contract against its own
+  navigation primitives. The parameter is required, not optional: a default-allow would let any
+  future caller silently reopen exactly this hole.
+
+Two deliberate scope choices. The guard lives on the context, so it **also constrains a human** who
+takes over the live session during an escalation handoff — the allowlist is a property of the
+automation session, not of the agent alone. And only *document* navigations are gated; subresources
+continue untouched, because legacy vendor apps routinely load assets from another host and blocking
+those would break pages for reasons that have nothing to do with navigation.
 
 Risky/irreversible actions are classified at *discovery* time by a name-keyword heuristic against
 the element being activated ("confirm", "submit", "delete", "withdraw", ...) and marked `risky:
@@ -249,10 +279,20 @@ an opt-in: pattern-based scrubbing for SSNs/emails/bearer-tokens/credit-card-sha
 full masking of any field whose *name* looks sensitive regardless of its value. The same
 sensitive-field detection blocks a literal from ever reaching the artifact at compile time (§2).
 
-Limits: the allowlist is a static file, not per-tenant yet (ties into §4's not-yet-built tenant
-config); the risky-keyword heuristic is a simple substring match, not a learned classifier, so a
-consequential action with an unexpected label could slip through unmarked — the allowlist's
-route/action-type restriction is the backstop for that case, not the risky flag alone.
+Limits, in rough order of how much they'd worry me in production:
+
+- **Subresource egress is not gated.** Document navigations are blocked, but a page may still
+  `fetch()` or load an image from an off-allowlist host. That is a data-exfiltration path, not a
+  navigation one, and closing it needs a separate policy dimension (which hosts may this app talk
+  to?) rather than reusing the route allowlist — gating all requests with the current list would
+  break legitimate vendor apps. This is the gap I'd close first.
+- **Same-document `pushState` navigation** never issues a request, so the interceptor cannot see
+  it. `takePolicyViolation()` re-checks the settled URL to catch it after the fact, which detects
+  but does not *prevent* — fine for a server-rendered legacy target, weaker for an SPA.
+- The allowlist is a static file, not per-tenant yet (ties into §4's not-yet-built tenant config).
+- The risky-keyword heuristic is a substring match, not a learned classifier, so a consequential
+  action with an unexpected label could slip through unmarked — the allowlist's route/action-type
+  restriction is the backstop for that case, not the risky flag alone.
 
 ## 7. Cuts
 

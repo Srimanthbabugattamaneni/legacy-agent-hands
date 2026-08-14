@@ -1,6 +1,0 @@
-{"ts":"2026-08-14T05:49:36.704Z","event":"replay_started","artifactId":"lookup-balance_573f0fd0","version":1,"params":{"memberId":"55555"}}
-{"ts":"2026-08-14T05:49:36.907Z","event":"step_started","stepId":"step_cb4e4e9b","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
-{"ts":"2026-08-14T05:49:36.953Z","event":"step_succeeded","stepId":"step_cb4e4e9b"}
-{"ts":"2026-08-14T05:49:36.954Z","event":"step_started","stepId":"step_369b4ffc","action":"click","description":"click button \"Search\""}
-{"ts":"2026-08-14T05:49:37.009Z","event":"business_outcome","outcome":"member_not_found","stepId":"step_369b4ffc"}
-{"ts":"2026-08-14T05:49:37.012Z","event":"replay_finished","result":{"artifactId":"lookup-balance_573f0fd0","artifactVersion":1,"startedAt":"2026-08-14T05:49:36.703Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-[REDACTED:credit_card]","status":"business_outcome","outcome":"member_not_found","detail":"The requested member ID does not exist in this system.","stepId":"step_369b4ffc","finishedAt":"2026-08-14T05:49:37.012Z"}}

@@ -56,7 +56,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
   const maxSteps = opts.maxSteps ?? 20;
   const headless = opts.headless ?? process.env.HEADLESS === "true";
 
-  const surface = await BrowserSurface.create({ headless });
+  const surface = await BrowserSurface.create({ headless, guard: (url) => checkNavigation(url) });
   const system = buildSystemPrompt(opts.goal, opts.targetUrl);
   const messages: ChatMessage[] = [];
   const stepRecords: DiscoveryStepRecord[] = [];
@@ -339,6 +339,15 @@ async function executeAction(
       extractTo = input.outputKey ?? "value";
       const text = await surface.extractText(locator!);
       description = `extract "${extractTo}" from ${el?.role} "${el?.name}" -> ${JSON.stringify(text)}`;
+    }
+
+    // A click on a link leaving the allowlist is refused at the network
+    // layer and raises nothing, so drain it explicitly. Reported back as a
+    // failed action, which routes it into the existing consecutive-failure
+    // path and, if the agent keeps trying, on to a human.
+    const violation = surface.takePolicyViolation();
+    if (violation) {
+      return { ok: false, error: `policy: blocked navigation to ${violation.url} (${violation.reason})` };
     }
 
     const afterObs = await surface.observe();

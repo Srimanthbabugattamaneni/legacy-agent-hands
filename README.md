@@ -121,6 +121,14 @@ npm run replay -- --capability open-subaccount --params '{"memberId":"10567","de
 Each replay prints a structured JSON `ReplayResult` and writes its own evidence run under
 `evidence/replay-<capability>-<timestamp>/`.
 
+The other half of the safety model — the **navigation allowlist** — is enforced at the browser
+context, so it holds however navigation was triggered (a navigate step in a tampered artifact, a
+click onto a link leaving the origin, a form submit, a redirect). Demonstrating it needs an
+artifact deliberately pointed off-allowlist, which would be a lie sitting in the capability
+catalog, so it is exercised by the test suite against the real browser and the real mock app
+instead — `npm test`, the "allowlist enforcement covers navigation however it was triggered"
+block in [tests/replay.integration.test.ts](tests/replay.integration.test.ts). See REPORT.md §6.
+
 ### d. Human escalation & handoff
 
 To see a live escalation, force one on a replay's blocked risky step and add `--headed` so you

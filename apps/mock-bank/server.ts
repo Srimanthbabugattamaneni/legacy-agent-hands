@@ -154,6 +154,7 @@ app.get("/members/:id", (req, res) => {
   ${rows}
 </table>
 <p><a href="/members/${member.id}/new-subaccount"><button type="button" onclick="location.href='/members/${member.id}/new-subaccount'">Open New Sub-Account</button></a></p>
+<p><a href="http://localhost:4999/partner-portal">Partner Credit Portal</a></p>
 `
     )
   );
