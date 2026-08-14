@@ -26,7 +26,11 @@ function coerceParams(artifact: CapabilityArtifact, supplied: Record<string, str
   const out: Record<string, string> = {};
   for (const input of artifact.inputs) {
     const value = supplied[input.name];
-    if (value === undefined || value === null || value === "") {
+    // Only absent is missing. An empty string is a value the caller chose to
+    // send — and often the interesting one, since it exercises the target's
+    // own required-field validation, which is a business outcome we want to
+    // report rather than an error we refuse to attempt.
+    if (value === undefined || value === null) {
       if (input.required) throw new Error(`missing required input parameter: ${input.name}`);
       continue;
     }
@@ -143,6 +147,24 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
           stepId: step.id,
           expected: "navigation stays within the allowlist",
           observed: `blocked navigation to ${violation.url} (${violation.reason})`,
+          finishedAt: new Date().toISOString(),
+        });
+      }
+
+      // Also drained before business-outcome matching: the dialog was
+      // dismissed to keep the run from hanging, so the page underneath may
+      // look perfectly ordinary. A flow that raised a dialog the recording
+      // never saw has diverged, and continuing would be acting on a guess.
+      const dialog = surface.takeDialog();
+      if (dialog) {
+        logger.log("unexpected_dialog", { stepId: step.id, type: dialog.type, message: dialog.message });
+        return finish({
+          ...base,
+          status: "failure",
+          errorClass: "unexpected_dialog",
+          stepId: step.id,
+          expected: "no native dialog (the recorded run raised none here)",
+          observed: `${dialog.type} dialog: ${dialog.message}`,
           finishedAt: new Date().toISOString(),
         });
       }
@@ -276,7 +298,11 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
       return classify(err);
     }
 
-    const status = surface.lastResponseStatus();
+    // Read-and-clear, so this reflects only what *this* step caused. The
+    // previous sticky accessor let a step that never navigated (a fill, a
+    // select) inherit an earlier 5xx and trigger the reload below in the
+    // middle of a form, discarding everything already typed.
+    const status = surface.takeNavigation()?.status;
     if (status && status >= 500 && !step.risky) {
       logger.log("transient_retry", { stepId: step.id, status });
       await new Promise((r) => setTimeout(r, 500));
@@ -290,7 +316,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
       } catch (err) {
         return classify(err);
       }
-      const retryStatus = surface.lastResponseStatus();
+      const retryStatus = surface.takeNavigation()?.status;
       if (retryStatus && retryStatus >= 500) {
         return { status: "hard_failure", errorClass: "transient_load_failure", error: `HTTP ${retryStatus} persisted after retry` };
       }
@@ -361,27 +387,36 @@ async function verifyCheckpoint(
   checkpoint: NonNullable<ArtifactStep["checkpoint"]>,
   params: Record<string, string>
 ): Promise<{ pass: boolean; expected: string; observed: string }> {
+  // Every condition present is checked and they must all hold. Returning on
+  // the first one present meant a checkpoint carrying both urlContains and
+  // textContains — which the schema allows — silently verified only the URL,
+  // so it asserted less than it claimed to.
+  const checks: { pass: boolean; expected: string; observed: string }[] = [];
+
   if (checkpoint.urlContains) {
     const expected = render(checkpoint.urlContains, params);
     const observed = surface.currentUrl();
-    return { pass: observed.includes(expected), expected: `URL contains "${expected}"`, observed };
+    checks.push({ pass: observed.includes(expected), expected: `URL contains "${expected}"`, observed });
   }
   if (checkpoint.textContains) {
     const expected = render(checkpoint.textContains, params);
     const observation = await surface.observe();
-    return {
+    checks.push({
       pass: observation.pageText.includes(expected),
       expected: `page text contains "${expected}"`,
       observed: observation.pageText.slice(0, 200),
-    };
+    });
   }
   if (checkpoint.locatorVisible) {
     try {
       await surface.waitFor(checkpoint.locatorVisible, 3000);
-      return { pass: true, expected: "locator visible", observed: "visible" };
+      checks.push({ pass: true, expected: "locator visible", observed: "visible" });
     } catch {
-      return { pass: false, expected: "locator visible", observed: "not found" };
+      checks.push({ pass: false, expected: "locator visible", observed: "not found" });
     }
   }
-  return { pass: true, expected: "(no assertion)", observed: "(no assertion)" };
+
+  if (checks.length === 0) return { pass: true, expected: "(no assertion)", observed: "(no assertion)" };
+  // Report the first failure so the error names the condition that broke.
+  return checks.find((c) => !c.pass) ?? { pass: true, expected: checks.map((c) => c.expected).join(" AND "), observed: "all conditions held" };
 }

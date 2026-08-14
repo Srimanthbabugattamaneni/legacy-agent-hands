@@ -1,0 +1,20 @@
+{"ts":"2026-08-14T15:34:00.032Z","event":"replay_started","artifactId":"open-subaccount_e8e6a9f1","version":1,"params":{"memberId":"10234","deposit":"300"}}
+{"ts":"2026-08-14T15:34:00.174Z","event":"step_started","stepId":"step_8f4c1ccb","action":"extract","description":"extract \"accountType\" from combobox \"Account Type\" -> \"Savings\\nChecking\\nCertificate of Deposit\""}
+{"ts":"2026-08-14T15:34:00.197Z","event":"step_succeeded","stepId":"step_8f4c1ccb"}
+{"ts":"2026-08-14T15:34:00.197Z","event":"step_started","stepId":"step_3f897bc5","action":"select","description":"select \"Savings\" in combobox \"Account Type\""}
+{"ts":"2026-08-14T15:34:00.202Z","event":"step_succeeded","stepId":"step_3f897bc5"}
+{"ts":"2026-08-14T15:34:00.203Z","event":"step_started","stepId":"step_5eb43114","action":"fill","description":"fill textbox \"Initial Deposit\" with \"{{deposit}}\""}
+{"ts":"2026-08-14T15:34:00.212Z","event":"step_succeeded","stepId":"step_5eb43114"}
+{"ts":"2026-08-14T15:34:00.212Z","event":"step_started","stepId":"step_7bbb41ac","action":"click","description":"click button \"Continue\""}
+{"ts":"2026-08-14T15:34:00.250Z","event":"step_succeeded","stepId":"step_7bbb41ac"}
+{"ts":"2026-08-14T15:34:00.250Z","event":"step_started","stepId":"step_a409bc66","action":"click","description":"click button \"Confirm & Open Account\""}
+{"ts":"2026-08-14T15:34:00.292Z","event":"step_succeeded","stepId":"step_a409bc66"}
+{"ts":"2026-08-14T15:34:00.292Z","event":"step_started","stepId":"step_b5162392","action":"extract","description":"extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\""}
+{"ts":"2026-08-14T15:34:00.301Z","event":"step_succeeded","stepId":"step_b5162392"}
+{"ts":"2026-08-14T15:34:00.301Z","event":"step_started","stepId":"step_23175440","action":"extract","description":"extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\""}
+{"ts":"2026-08-14T15:34:00.303Z","event":"step_succeeded","stepId":"step_23175440"}
+{"ts":"2026-08-14T15:34:00.303Z","event":"step_started","stepId":"step_f1f33f3d","action":"extract","description":"extract \"member\" from cell \"Member\" -> \"Sam Whitfield (20001)\""}
+{"ts":"2026-08-14T15:34:00.307Z","event":"step_succeeded","stepId":"step_f1f33f3d"}
+{"ts":"2026-08-14T15:34:00.307Z","event":"step_started","stepId":"step_1935f59f","action":"extract","description":"extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\""}
+{"ts":"2026-08-14T15:34:00.309Z","event":"step_succeeded","stepId":"step_1935f59f"}
+{"ts":"2026-08-14T15:34:00.323Z","event":"replay_finished","result":{"artifactId":"open-subaccount_e8e6a9f1","artifactVersion":1,"startedAt":"2026-08-14T15:34:00.032Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786721640032","status":"success","outputs":{"accountType":"Savings\nChecking\nCertificate of Deposit","newAccountNumber":"[REDACTED]","member":"Jordan Alvarez (10234)"},"finishedAt":"2026-08-14T15:34:00.323Z"}}

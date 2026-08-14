@@ -120,7 +120,6 @@
                 "element_not_found",
                 "checkpoint_failed",
                 "unexpected_dialog",
-                "session_timeout",
                 "transient_load_failure",
                 "policy_blocked",
                 "unknown"

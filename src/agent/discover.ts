@@ -8,10 +8,11 @@ import type { DiscoveryStepRecord } from "./types.js";
 import type { CapabilityArtifact } from "../schema/artifact.js";
 import type { ActionType } from "../schema/artifact.js";
 import type { Observation } from "../schema/observation.js";
-import { checkActionType, checkNavigation, isRiskyByName } from "../safety/policy.js";
+import { checkActionType, checkNavigation, classifyRisk } from "../safety/policy.js";
 import { RunLogger } from "../util/logger.js";
 import { newId, slugify } from "../util/ids.js";
 import { createEscalation, waitForResolution } from "../escalation/escalate.js";
+import { resolveVersion } from "./versioning.js";
 import { createProvider } from "./llm/index.js";
 import type { ChatMessage, ToolCall, LlmProvider } from "./llm/types.js";
 
@@ -115,13 +116,29 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
           outputDescriptions: opts.outputDescriptions,
         });
 
-        mkdirSync(path.join(process.cwd(), "artifacts"), { recursive: true });
-        const artifactPath = path.join(process.cwd(), "artifacts", `${opts.name}.json`);
-        writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+        const artifactsDir = path.join(process.cwd(), "artifacts");
+        mkdirSync(artifactsDir, { recursive: true });
+        const decision = resolveVersion(artifact, artifactsDir);
+        if (decision.disposition !== "unchanged") {
+          writeFileSync(decision.artifactPath, JSON.stringify(decision.artifact, null, 2));
+        }
         await surface.screenshot(logger.artifactPath("final.png"));
-        logger.log("artifact_written", { artifactPath });
+        logger.log("artifact_written", {
+          artifactPath: decision.artifactPath,
+          version: decision.artifact.version,
+          disposition: decision.disposition,
+          archivedPath: decision.archivedPath,
+        });
+        if (decision.disposition === "bumped") {
+          console.log(`  previous version archived to ${path.relative(process.cwd(), decision.archivedPath!)}`);
+        }
 
-        return { status: "success", artifact, artifactPath, runDir: logger.dir };
+        return {
+          status: "success",
+          artifact: decision.artifact,
+          artifactPath: decision.artifactPath,
+          runDir: logger.dir,
+        };
       }
 
       if (toolUse.name === "finish_stuck") {
@@ -316,7 +333,6 @@ async function executeAction(
     if (ref && !el) return { ok: false, error: `unknown ref ${ref} (stale observation?)` };
 
     const locator = ref ? surface.resolveElementToLocator(ref) : undefined;
-    const risky = el ? isRiskyByName(el.name) : false;
     let literalValue: string | undefined;
     let extractTo: string | undefined;
     let description = "";
@@ -339,6 +355,21 @@ async function executeAction(
       extractTo = input.outputKey ?? "value";
       const text = await surface.extractText(locator!);
       description = `extract "${extractTo}" from ${el?.role} "${el?.name}" -> ${JSON.stringify(text)}`;
+    }
+
+    // Classified from what the step actually did, not only what the control
+    // was called — pressing Enter in a form field submits it while the name
+    // available here is the input's, not the submit button's.
+    const navigation = surface.takeNavigation();
+    const risk = classifyRisk({ elementName: el?.name, requestMethod: navigation?.method });
+    const risky = risk.risky;
+
+    const dialog = surface.takeDialog();
+    if (dialog) {
+      return {
+        ok: false,
+        error: `unexpected ${dialog.type} dialog appeared and was dismissed: ${JSON.stringify(dialog.message)}`,
+      };
     }
 
     // A click on a link leaving the allowlist is refused at the network

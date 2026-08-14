@@ -181,6 +181,60 @@ describe("compileArtifact", () => {
     });
   });
 
+  it("marks an input parameter sensitive when its field was flagged sensitive", () => {
+    // Regression: InputParam.sensitive was hardcoded false, so the flag the
+    // schema declares could never actually be true for any artifact.
+    const artifact = compileArtifact({
+      id: "cap_8",
+      name: "login",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({ id: "s1", action: "fill", literalValue: "hunter2", sensitive: true }),
+        record({ id: "s2", action: "fill", literalValue: "10234" }),
+      ],
+      paramLiterals: { password: "hunter2", memberId: "10234" },
+      outputsDeclared: {},
+    });
+    const byName = Object.fromEntries(artifact.inputs.map((i) => [i.name, i.sensitive]));
+    expect(byName.password).toBe(true);
+    expect(byName.memberId).toBe(false);
+  });
+
+  it("never bakes an extracted (per-record) value into a checkpoint", () => {
+    // The digit heuristic alone lets a member's name through — it has no
+    // digits — which would persist PII into a committed artifact and break
+    // replay for every other member.
+    const artifact = compileArtifact({
+      id: "cap_9",
+      name: "lookup-balance",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({
+          id: "s1",
+          action: "click",
+          pageTextBefore: "Member Lookup",
+          // The PII line is deliberately the *shortest* zero-digit candidate,
+          // so neither the digit ranking nor the shortest-wins tiebreak saves
+          // it — only rejecting extracted values and deprioritising data rows
+          // does. (A fixture where the safe line is shorter passes with or
+          // without the fix, and so tests nothing.)
+          pageTextAfter: "Member Lookup\nName\tBob Lee\nAccount Overview Details",
+        }),
+      ],
+      paramLiterals: { memberId: "10234" },
+      outputsDeclared: { memberName: "Bob Lee" },
+    });
+    const cp = artifact.steps[0]!.checkpoint;
+    expect(cp?.textContains).not.toContain("Bob Lee");
+    expect(cp?.textContains).toBe("Account Overview Details");
+  });
+
   it("drops a declared output with no backing extract step, keeps one that has one", () => {
     // Regression: finish_success can claim an output was captured without
     // the agent ever calling extract for it (seen in practice — a weaker

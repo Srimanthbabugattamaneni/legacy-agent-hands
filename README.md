@@ -82,6 +82,11 @@ with a small local open-weight model — see "No Anthropic API key?" above — w
 concrete instructions more reliably than an open-ended goal. A frontier hosted model handles the
 shorter, more natural phrasing fine.)
 
+Re-running `discover` for a name that already exists compares the new recording against the stored
+one: identical behaviour leaves the artifact untouched, changed behaviour bumps `version` and
+archives the previous file to `artifacts/history/<name>.v<N>.json`. `artifacts/<name>.json` is
+always the current version.
+
 By default the browser is visible (`HEADLESS=false`, matching `.env.example`) so you can watch the
 agent work and, if it escalates, take over the same window. A structured run log (and a
 screenshot) is written to `evidence/discover-<name>-<timestamp>/`; the compiled capability is
@@ -157,6 +162,10 @@ copy — then submit **Resume**. The waiting process picks up the resolution and
 npm test          # vitest: unit tests + real Playwright-driven replay tests against apps/mock-bank
 npm run typecheck
 ```
+
+The suite starts its own copy of the mock bank on port 4000, so **stop `npm run mock` before
+running it** — otherwise the run fails on `EADDRINUSE` (with a message saying so). It can't just
+grab a free port because the safety allowlist pins `localhost:4000`; see REPORT.md §7.
 
 The replay tests never call an LLM (replay never does), so they're fast, deterministic, and
 CI-safe. They exercise the full error taxonomy end to end: success, all four business-outcome

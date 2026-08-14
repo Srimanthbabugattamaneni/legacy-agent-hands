@@ -63,6 +63,40 @@ export function isRiskyByName(name: string, policy: PolicyConfig = loadPolicy())
   return policy.riskyActionNameKeywords.some((kw) => lower.includes(kw.toLowerCase()));
 }
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Classifies a discovery step as risky from *both* the label of the control
+ * and the effect the step actually had.
+ *
+ * The label alone is not enough, and the gap was exploitable: `risky` used
+ * to come only from the activated element's accessible name, but pressing
+ * Enter in a form field submits that form while the name inspected is the
+ * *input's* ("Initial Deposit"), never the submit control's — and a
+ * `press_key` with no element at all inspected nothing. Either way an
+ * irreversible submit compiled as `risky: false` and replayed with no
+ * authorization, defeating the block-by-default posture entirely.
+ *
+ * A non-GET document request is a state change no matter which control
+ * triggered it, which also covers unlabelled buttons and JS-driven submits.
+ * Over-marking is the safe direction here: a false positive costs the caller
+ * an explicit `--allow-risky`, a false negative performs an irreversible
+ * action unattended.
+ */
+export function classifyRisk(
+  input: { elementName?: string; requestMethod?: string },
+  policy: PolicyConfig = loadPolicy()
+): { risky: boolean; reason: string } {
+  if (input.elementName && isRiskyByName(input.elementName, policy)) {
+    return { risky: true, reason: `control name matches a risky keyword: "${input.elementName}"` };
+  }
+  const method = input.requestMethod?.toUpperCase();
+  if (method && !SAFE_METHODS.has(method)) {
+    return { risky: true, reason: `step caused a state-changing ${method} request` };
+  }
+  return { risky: false, reason: "no risky keyword and no state-changing request" };
+}
+
 /** Applied at *replay* time: a step recorded as risky is blocked unless the
  * caller explicitly authorizes risky execution for this invocation. This is
  * the "handle the risky class conservatively" requirement (3.4) — default

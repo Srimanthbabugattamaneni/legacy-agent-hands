@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { checkNavigation, checkActionType, isRiskyByName, checkRiskyStep, loadPolicy } from "../src/safety/policy.js";
+import {
+  checkNavigation,
+  checkActionType,
+  isRiskyByName,
+  checkRiskyStep,
+  classifyRisk,
+  loadPolicy,
+} from "../src/safety/policy.js";
 
 describe("safety policy", () => {
   const policy = loadPolicy();
@@ -39,5 +46,33 @@ describe("safety policy", () => {
     expect(checkRiskyStep(true, false).allowed).toBe(false);
     expect(checkRiskyStep(true, true).allowed).toBe(true);
     expect(checkRiskyStep(false, false).allowed).toBe(true);
+  });
+});
+
+describe("classifyRisk", () => {
+  const policy = loadPolicy();
+
+  it("flags a risky-sounding control name", () => {
+    expect(classifyRisk({ elementName: "Confirm & Open Account", requestMethod: "GET" }, policy).risky).toBe(true);
+  });
+
+  it("flags a state-changing request even when the control name looks harmless", () => {
+    // The bypass this closes: pressing Enter in a form field submits the
+    // form, but the only name available is the *input's* ("Initial Deposit"),
+    // never the submit button's — so an irreversible action compiled as
+    // risky: false and replayed with no authorization.
+    const result = classifyRisk({ elementName: "Initial Deposit", requestMethod: "POST" }, policy);
+    expect(result.risky).toBe(true);
+    expect(result.reason).toMatch(/POST/);
+  });
+
+  it("flags a state-changing request with no element at all (press_key without a ref)", () => {
+    expect(classifyRisk({ requestMethod: "POST" }, policy).risky).toBe(true);
+  });
+
+  it("leaves an ordinary GET navigation on a harmless control unflagged", () => {
+    expect(classifyRisk({ elementName: "Search", requestMethod: "GET" }, policy).risky).toBe(false);
+    expect(classifyRisk({ elementName: "Search" }, policy).risky).toBe(false);
+    expect(classifyRisk({}, policy).risky).toBe(false);
   });
 });

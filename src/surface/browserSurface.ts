@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
-import type { Surface, NavigationGuard, PolicyViolation } from "./types.js";
+import type { Surface, NavigationGuard, PolicyViolation, NavigationInfo, DialogInfo } from "./types.js";
 import { ElementNotFoundError, PolicyViolationError } from "./types.js";
 import type { LocatorDescriptor, LocatorStrategy } from "../schema/locator.js";
 import type { Observation } from "../schema/observation.js";
@@ -22,8 +22,9 @@ function evalInPage<T>(page: Page, fn: () => T): Promise<T> {
 
 export class BrowserSurface implements Surface {
   private lastElements = new Map<string, RawElementInfo>();
-  private lastStatus: number | undefined;
+  private navigation: NavigationInfo | undefined;
   private violation: PolicyViolation | undefined;
+  private dialog: DialogInfo | undefined;
 
   private constructor(
     private browser: Browser,
@@ -32,14 +33,18 @@ export class BrowserSurface implements Surface {
     private guard: NavigationGuard
   ) {
     page.on("response", (res) => {
-      if (res.request().resourceType() === "document") {
-        this.lastStatus = res.status();
+      const request = res.request();
+      if (request.resourceType() === "document") {
+        this.navigation = { status: res.status(), method: request.method() };
       }
     });
     // Legacy apps sometimes throw native dialogs the artifact didn't
-    // anticipate; auto-dismiss so the loop never hard-hangs, and let
-    // callers detect the surprise via lastResponseStatus()/text mismatches.
+    // anticipate. Still auto-dismissed so a run can never hard-hang on one,
+    // but now recorded too: an unexpected dialog means the flow diverged
+    // from what was recorded, which the caller needs to hear about rather
+    // than have silently swallowed.
     page.on("dialog", (dialog) => {
+      this.dialog = { type: dialog.type(), message: dialog.message() };
       void dialog.dismiss();
     });
   }
@@ -287,8 +292,16 @@ export class BrowserSurface implements Surface {
     await this.page.screenshot({ path: destPath, fullPage: true });
   }
 
-  lastResponseStatus(): number | undefined {
-    return this.lastStatus;
+  takeNavigation(): NavigationInfo | undefined {
+    const recorded = this.navigation;
+    this.navigation = undefined;
+    return recorded;
+  }
+
+  takeDialog(): DialogInfo | undefined {
+    const recorded = this.dialog;
+    this.dialog = undefined;
+    return recorded;
   }
 
   takePolicyViolation(): PolicyViolation | undefined {

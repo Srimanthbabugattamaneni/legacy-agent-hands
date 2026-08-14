@@ -21,7 +21,24 @@ beforeAll(async () => {
   // the allowlist doing exactly its job, just not what this test is after.
   const port = Number(process.env.MOCK_BANK_PORT ?? 4000);
   server = app.listen(port);
-  await new Promise<void>((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve);
+    // Without this the EADDRINUSE surfaces as an unhandled exception with no
+    // hint about the cause, and the README tells you to leave `npm run mock`
+    // running — so following the README and then running the suite produced
+    // a confusing crash.
+    server.once("error", (err: NodeJS.ErrnoException) => {
+      reject(
+        err.code === "EADDRINUSE"
+          ? new Error(
+              `port ${port} is already in use — stop a running \`npm run mock\` before running the tests, ` +
+                `or set MOCK_BANK_PORT (note: the safety allowlist pins localhost:4000, so a different ` +
+                `port also needs src/safety/allowlist.json updated).`
+            )
+          : err
+      );
+    });
+  });
   baseUrl = `http://localhost:${port}`;
 });
 
@@ -293,6 +310,118 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
     if (result.status === "failure") {
       expect(result.errorClass).toBe("policy_blocked");
       expect(result.observed).toContain(OFF_ALLOWLIST_ORIGIN);
+    }
+  }, 30000);
+});
+
+describe("runtime conditions the recorded flow never saw", () => {
+  it("reports an unexpected native dialog instead of silently swallowing it", async () => {
+    // Dialogs are still auto-dismissed so a run can't hang, but a flow that
+    // raises one the recording never saw has diverged, and continuing would
+    // be acting on a guess. Before this, `unexpected_dialog` was declared in
+    // the ErrorClass enum with nothing anywhere able to produce it.
+    const result = await replay({
+      artifact: {
+        schemaVersion: "1.0",
+        id: "test-dialog",
+        name: "test-dialog",
+        version: 1,
+        description: "dialog fixture",
+        goal: "dialog fixture",
+        createdAt: new Date().toISOString(),
+        target: { appId: "mock-bank", entryUrl: `${baseUrl}/members/10234/archive` },
+        inputs: [],
+        outputs: [],
+        steps: [
+          {
+            id: "s1",
+            action: "click",
+            description: "click Archive Record",
+            locator: {
+              primary: { strategy: "role", role: "button", name: "Archive Record", nameMatch: "exact", nth: 0 },
+              fallbacks: [],
+            },
+            risky: false,
+          },
+        ],
+        successCheckpoint: { description: "unreachable" },
+      },
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("unexpected_dialog");
+      expect(result.observed).toContain("Archive this member record?");
+    }
+  }, 30000);
+
+  it("fails a checkpoint whose text condition breaks even though its URL condition holds", async () => {
+    // The schema allows both; verifyCheckpoint used to return on the first
+    // one present, so a checkpoint like this asserted strictly less than it
+    // claimed to.
+    const result = await replay({
+      artifact: {
+        schemaVersion: "1.0",
+        id: "test-both",
+        name: "test-both",
+        version: 1,
+        description: "checkpoint fixture",
+        goal: "checkpoint fixture",
+        createdAt: new Date().toISOString(),
+        target: { appId: "mock-bank", entryUrl: `${baseUrl}/members/10234` },
+        inputs: [],
+        outputs: [],
+        steps: [
+          {
+            id: "s1",
+            action: "extract",
+            description: "read the member name",
+            locator: {
+              primary: {
+                strategy: "css",
+                selector: 'xpath=//td[b[normalize-space(text())="Name"]]/following-sibling::td[1]',
+                nth: 0,
+              },
+              fallbacks: [],
+            },
+            extractTo: "memberName",
+            risky: false,
+            checkpoint: {
+              description: "on the member page and showing a heading that isn't there",
+              urlContains: "/members/10234", // true
+              textContains: "Loan Origination History", // false, and not a business-outcome trigger
+            },
+          },
+        ],
+        successCheckpoint: { description: "unreachable" },
+      },
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("checkpoint_failed");
+      expect(result.expected).toContain("Loan Origination History");
+    }
+  }, 30000);
+
+  it("passes an explicitly empty parameter through to the app instead of refusing to run", async () => {
+    // "" is a value the caller chose to send, and the interesting one here:
+    // it exercises the target's own validation, which is a business outcome
+    // worth reporting rather than an error we refuse to attempt.
+    const result = await replay({
+      artifact: openSubaccountArtifact(),
+      params: { memberId: "10234", deposit: "" },
+      headless: true,
+      allowRisky: true,
+    });
+
+    expect(result.status).toBe("business_outcome");
+    if (result.status === "business_outcome") {
+      expect(result.outcome).toBe("validation_error");
     }
   }, 30000);
 });

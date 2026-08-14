@@ -1,8 +1,0 @@
-{"ts":"2026-08-14T15:14:15.045Z","event":"replay_started","artifactId":"lookup-balance_8aecf7fe","version":1,"params":{"memberId":"99999"}}
-{"ts":"2026-08-14T15:14:15.185Z","event":"step_started","stepId":"step_069a49a8","action":"navigate","description":"navigate to http://localhost:4000/"}
-{"ts":"2026-08-14T15:14:15.201Z","event":"step_succeeded","stepId":"step_069a49a8"}
-{"ts":"2026-08-14T15:14:15.201Z","event":"step_started","stepId":"step_697279f5","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
-{"ts":"2026-08-14T15:14:15.224Z","event":"step_succeeded","stepId":"step_697279f5"}
-{"ts":"2026-08-14T15:14:15.225Z","event":"step_started","stepId":"step_f8d112a1","action":"click","description":"click button \"Search\""}
-{"ts":"2026-08-14T15:14:15.259Z","event":"business_outcome","outcome":"session_timeout","stepId":"step_f8d112a1"}
-{"ts":"2026-08-14T15:14:15.259Z","event":"replay_finished","result":{"artifactId":"lookup-balance_8aecf7fe","artifactVersion":1,"startedAt":"2026-08-14T15:14:15.045Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-[REDACTED:credit_card]","status":"business_outcome","outcome":"session_timeout","detail":"The back-office session expired and requires re-login.","stepId":"step_f8d112a1","finishedAt":"2026-08-14T15:14:15.259Z"}}

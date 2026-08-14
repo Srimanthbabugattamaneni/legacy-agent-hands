@@ -25,6 +25,14 @@ export type NavigationGuard = (url: string) => { allowed: boolean; reason: strin
 
 export type PolicyViolation = { url: string; reason: string };
 
+/** The document response a step caused, if it caused one. `method` is what
+ * makes effect-based risk classification possible: a non-GET navigation is
+ * a state change regardless of what the activated control was labelled. */
+export type NavigationInfo = { status: number; method: string };
+
+/** A native dialog (alert/confirm/prompt) the page raised. */
+export type DialogInfo = { type: string; message: string };
+
 export class PolicyViolationError extends Error {
   constructor(readonly url: string, readonly reason: string) {
     super(`navigation blocked by policy: ${url} (${reason})`);
@@ -47,7 +55,15 @@ export interface Surface {
   /** Maps a ref from the most recent observe() into a durable, replayable
    * LocatorDescriptor — this is what gets written into an artifact step. */
   resolveElementToLocator(ref: string): LocatorDescriptor;
-  lastResponseStatus(): number | undefined;
+  /**
+   * Read-and-clear: the document response caused since the last call, or
+   * undefined if this step caused no navigation. Read-and-clear rather than
+   * a sticky `lastResponseStatus()` on purpose — a sticky value let a
+   * non-navigating step (a fill, a select) inherit the previous step's
+   * status, so a lingering 5xx could trigger a spurious page reload in the
+   * middle of filling a form and wipe everything typed so far.
+   */
+  takeNavigation(): NavigationInfo | undefined;
   /**
    * Read-and-clear: returns a navigation the policy guard blocked since the
    * last call, if any. Callers drain this after every action, because a
@@ -55,6 +71,13 @@ export interface Surface {
    * no exception for the orchestration layer to catch.
    */
   takePolicyViolation(): PolicyViolation | undefined;
+  /**
+   * Read-and-clear: a native dialog the page raised since the last call.
+   * Dialogs are still auto-dismissed so a run can never hang on one, but an
+   * unanticipated dialog means the flow diverged from what was recorded, so
+   * it must be reportable rather than silently swallowed.
+   */
+  takeDialog(): DialogInfo | undefined;
   close(): Promise<void>;
 }
 

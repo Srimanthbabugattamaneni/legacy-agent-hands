@@ -1,0 +1,12 @@
+{"ts":"2026-08-14T15:33:54.344Z","event":"replay_started","artifactId":"lookup-balance_8aecf7fe","version":1,"params":{"memberId":"10234"}}
+{"ts":"2026-08-14T15:33:54.641Z","event":"step_started","stepId":"step_069a49a8","action":"navigate","description":"navigate to http://localhost:4000/"}
+{"ts":"2026-08-14T15:33:54.660Z","event":"step_succeeded","stepId":"step_069a49a8"}
+{"ts":"2026-08-14T15:33:54.660Z","event":"step_started","stepId":"step_697279f5","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
+{"ts":"2026-08-14T15:33:54.685Z","event":"step_succeeded","stepId":"step_697279f5"}
+{"ts":"2026-08-14T15:33:54.685Z","event":"step_started","stepId":"step_f8d112a1","action":"click","description":"click button \"Search\""}
+{"ts":"2026-08-14T15:33:54.731Z","event":"step_succeeded","stepId":"step_f8d112a1"}
+{"ts":"2026-08-14T15:33:54.731Z","event":"step_started","stepId":"step_6e2bd74c","action":"extract","description":"extract \"savingsBalance\" from cell \"Savings Balance\" -> \"$4231.09\""}
+{"ts":"2026-08-14T15:33:54.742Z","event":"step_succeeded","stepId":"step_6e2bd74c"}
+{"ts":"2026-08-14T15:33:54.742Z","event":"step_started","stepId":"step_52418d49","action":"extract","description":"extract \"checkingBalance\" from cell \"Checking Balance\" -> \"$812.44\""}
+{"ts":"2026-08-14T15:33:54.744Z","event":"step_succeeded","stepId":"step_52418d49"}
+{"ts":"2026-08-14T15:33:54.766Z","event":"replay_finished","result":{"artifactId":"lookup-balance_8aecf7fe","artifactVersion":1,"startedAt":"2026-08-14T15:33:54.344Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-1786721634344","status":"success","outputs":{"savingsBalance":"$4231.09","checkingBalance":"$812.44"},"finishedAt":"2026-08-14T15:33:54.766Z"}}

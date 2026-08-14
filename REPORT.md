@@ -132,6 +132,20 @@ open-weight model once called `finish_success` claiming an `accountNumber` outpu
 calling `extract` for it (it fabricated `"[REDACTED]"` instead). Without this check the artifact
 would have advertised a return value replay could never produce.
 
+**Versioning is behaviour, not just a field.** `version` was previously always `1` and re-recording
+a capability overwrote `artifacts/<name>.json` in place, which meant the previous version was simply
+gone — "versioned and reviewable" described the shape of the data rather than anything the system
+did. `resolveVersion` (`src/agent/versioning.ts`) now compares a **structural fingerprint** of the
+new recording against what is on disk. The fingerprint deliberately excludes `createdAt` and the
+generated step ids, which differ on every run: a capability's identity is its behaviour, not the
+run that produced it. Identical behaviour leaves the file untouched (no spurious diff from
+re-recording); changed behaviour bumps the version and archives the prior file to
+`artifacts/history/<name>.v<N>.json`. `artifacts/<name>.json` stays the current-version pointer, so
+the catalog and `replay --capability` are unaffected. The real discovery run in `/evidence`
+exercises the identical-behaviour path (`disposition: "unchanged"`), which is the harder one to get
+right given ids and timestamps change every time; the bump-and-archive path is covered by
+`tests/versioning.test.ts`.
+
 `npm run schema:export` dumps every schema to JSON Schema under `artifacts/schema/` for review
 without reading TypeScript.
 
@@ -153,8 +167,12 @@ The taxonomy is a discriminated union (`src/schema/result.ts`) with four branche
   business page that happens to also fail a checkpoint is correctly classified as an outcome, not
   a bug.
 - **`failure`** — a tagged `errorClass` (`element_not_found`, `checkpoint_failed`,
-  `unexpected_dialog`, `session_timeout`, `transient_load_failure`, `policy_blocked`, `unknown`)
-  plus `expected`/`observed`/`stepId` for debugging.
+  `unexpected_dialog`, `transient_load_failure`, `policy_blocked`, `unknown`) plus
+  `expected`/`observed`/`stepId` for debugging. Every one of these has a producer; an enum member
+  nothing can emit is a claim the system does not honour. `session_timeout` used to sit here *and*
+  in the business-outcome catalog — the same condition with two homes, which is precisely the
+  business-outcome/failure conflation the brief names as the most common design mistake. It is a
+  legitimate answer the caller must handle, so it lives only in the catalog now.
 - **`escalated`** — a human intervened; the result carries their notes (§5).
 
 Transient handling: if a step's resulting HTTP response is ≥500 and the step isn't risky, replay
@@ -165,10 +183,18 @@ against a mock app that fails the first hit and succeeds after). Risky steps are
 never auto-retried, since retrying a POST that already may have partially applied is not safe to
 do unattended.
 
-Native dialogs are auto-dismissed defensively (`BrowserSurface`'s `page.on("dialog")` handler) so
-an unanticipated `confirm()`/`alert()` can't hard-hang a run; the mock app doesn't currently
-trigger one, so this path is implemented but not exercised in the demo evidence — a documented gap,
-not an oversight.
+Native dialogs are auto-dismissed (`BrowserSurface`'s `page.on("dialog")` handler) so an
+unanticipated `confirm()`/`alert()` can't hard-hang a run — but dismissing is not the same as
+handling. The dialog is now recorded and drained by the caller, and replay reports
+`unexpected_dialog`. Silently dismissing left the page underneath looking perfectly ordinary, so a
+flow that had diverged from its recording would carry on acting on a guess. The mock app exposes an
+unlinked `/members/:id/archive` page that raises a `confirm()` purely to exercise this path in
+tests; it is unlinked so a stray control never lands in front of the discovery agent.
+
+Retry safety also depends on the response accessor being *read-and-clear*
+(`Surface.takeNavigation()`). A sticky "last response status" let a step that never navigated (a
+fill, a select) inherit an earlier 5xx and trigger the reload above mid-form, discarding everything
+typed so far.
 
 Secondary UI drift: out of scope by the brief's own framing (these are stable enterprise UIs), and
 the fallback locator chain is the mitigation that exists — a `role+name` match survives most
@@ -264,9 +290,20 @@ automation session, not of the agent alone. And only *document* navigations are 
 continue untouched, because legacy vendor apps routinely load assets from another host and blocking
 those would break pages for reasons that have nothing to do with navigation.
 
-Risky/irreversible actions are classified at *discovery* time by a name-keyword heuristic against
-the element being activated ("confirm", "submit", "delete", "withdraw", ...) and marked `risky:
-true` on the artifact step. At *replay* time the posture is **block by default**: a risky step
+Risky/irreversible actions are classified at *discovery* time by `classifyRisk`
+(`src/safety/policy.ts`) from **two** signals: a name-keyword heuristic against the element being
+activated ("confirm", "submit", "delete", "withdraw", ...), **and** whether the step actually caused
+a non-GET document request.
+
+The second signal exists because the first is bypassable, and was. Classification originally read
+only the activated element's accessible name — but pressing Enter in a form field submits that form
+while the only name available is the *input's* ("Initial Deposit"), never the submit control's; and
+`press_key` may carry no element reference at all, in which case nothing was inspected. Either way
+an irreversible submit compiled as `risky: false` and replayed with no authorization, which defeats
+the block-by-default posture below entirely. A state-changing HTTP method is a property of what the
+step *did* rather than what a control was labelled, so it also covers unlabelled buttons and
+JS-driven submits. Over-marking is the safe direction: a false positive costs the caller an explicit
+`--allow-risky`, a false negative performs an irreversible action unattended. At *replay* time the posture is **block by default**: a risky step
 requires the caller to pass `allowRisky: true` explicitly. I chose block-then-require-caller-
 authorization over "pause and ask inline" because replay is the *production, no-human-present*
 path (per the spec's own framing) — there's no one to ask inline, and false-inline-confirmation
@@ -275,9 +312,19 @@ product, presumably because a human already approved the action upstream), or th
 into `--escalate-on-risky` to route it to a human explicitly instead of just failing.
 
 Redaction (`src/safety/redact.ts`) runs unconditionally in `RunLogger`, on every log line, not as
-an opt-in: pattern-based scrubbing for SSNs/emails/bearer-tokens/credit-card-shaped strings, plus
-full masking of any field whose *name* looks sensitive regardless of its value. The same
-sensitive-field detection blocks a literal from ever reaching the artifact at compile time (§2).
+an opt-in: pattern-based scrubbing for SSNs/emails/bearer-tokens/card numbers, plus full masking of
+any field whose *name* looks sensitive regardless of its value. The same sensitive-field detection
+blocks a literal from ever reaching the artifact at compile time, and marks the corresponding input
+parameter `sensitive` (§2).
+
+Card detection **validates** rather than pattern-matching alone: a digit run must be 13–19 digits,
+pass the Luhn check, and start with a major-network IIN digit (3–6). The pattern alone matched any
+13-digit run, which meant every run id — they embed `Date.now()` — was redacted, and the evidence
+log corrupted its own `evidenceDir` pointer in 13 committed files. Worth noting what the fix
+deliberately avoids: tightening to separator-grouped forms (`\d{4}-\d{4}-…`) would have removed the
+false positives but stopped matching unseparated `4111111111111111`. For a redactor guarding
+regulated data, a false negative is a leak while a false positive is only noise, so the fix had to
+reduce false positives *without* narrowing what counts as a card.
 
 Limits, in rough order of how much they'd worry me in production:
 
@@ -316,6 +363,17 @@ Limits, in rough order of how much they'd worry me in production:
   fails loudly, versus a URL that silently targets the wrong record), and the digit-ranking
   heuristic already steers checkpoints toward digit-free text. Next: match on word boundaries, and
   refuse to tokenize param values below a length threshold.
+- **Checkpoint PII filtering is heuristic and reduces rather than eliminates the risk.** Candidate
+  lines containing an extracted value are rejected and tab-separated data rows are deprioritised
+  (§2), which covers the realistic cases, but a page whose only distinguishing new text is
+  unextracted PII would still bake it into the artifact. A real fix needs either a second recording
+  to diff against (text stable across two records is chrome; text that differs is data) or a PII
+  classifier — both out of scope for one discovery run.
+- **The port collision between `npm run mock` and `npm test` is reported, not removed.** Both bind
+  4000 and the suite now fails with an actionable message instead of an opaque `EADDRINUSE`. It
+  can't simply take an ephemeral port because the safety allowlist pins `localhost:4000`; doing this
+  properly means making the allowlist origin configurable, which is the same work as the per-tenant
+  config in §4 and belongs with it.
 - **`role`-based accessible-name computation is a hand-rolled approximation** of the real
   accessibility algorithm (`src/surface/domSnapshot.ts`), not the browser's actual accname
   computation — good enough for this target and close enough to what Playwright's own `getByRole`

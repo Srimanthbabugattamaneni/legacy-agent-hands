@@ -276,6 +276,26 @@ app.post("/members/:id/new-subaccount/confirm", (req, res) => {
   );
 });
 
+/**
+ * Raises a native confirm() — the class of interstitial a recorded flow can
+ * hit at runtime without having seen it during discovery. Deliberately not
+ * linked from any other page: it exists to exercise the unexpected_dialog
+ * path in tests, and linking it would put a stray control in front of the
+ * discovery agent on a page it has no business clicking.
+ */
+app.get("/members/:id/archive", (req, res) => {
+  const id = req.params.id;
+  res.send(
+    layout(
+      "Archive Record",
+      `<h2>Archive Member Record</h2>
+       <form method="GET" action="/members/${id}">
+         <button type="submit" onclick="return confirm('Archive this member record? This cannot be undone.')">Archive Record</button>
+       </form>`
+    )
+  );
+});
+
 app.get("/login", (_req, res) => {
   res.send(layout("Log In", `<h2>Log In</h2><p>(stub — not implemented, out of scope)</p>`));
 });

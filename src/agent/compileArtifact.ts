@@ -30,21 +30,41 @@ function toValueRef(literal: string, paramLiterals: Record<string, string>, sens
  * distinguish "stable page chrome" from "this record's own values" any
  * other way; preferring the leftover-digit-free candidate, and the
  * shortest one among ties, reliably picks a heading/label over a data row.
- * (Caught by tests/replay.integration.test.ts against a second member.) */
-function deriveCheckpoint(step: DiscoveryStepRecord, paramLiterals: Record<string, string>): Checkpoint | undefined {
+ * (Caught by tests/replay.integration.test.ts against a second member.)
+ *
+ * Digits alone are not enough, though: a member's *name* has no digits at
+ * all, so it would sail through and get baked into the checkpoint —
+ * persisting PII into a committed artifact and breaking replay for every
+ * other member. Two more filters close most of that gap. Any line containing
+ * a value this run extracted is rejected outright, since extracted values
+ * are per-record data by definition. And lines containing a tab are
+ * deprioritised: innerText separates table cells with tabs, so a tabbed line
+ * is a label/value data row while an untabbed one is a heading. Heuristic,
+ * not a guarantee — see REPORT §7. */
+function deriveCheckpoint(
+  step: DiscoveryStepRecord,
+  paramLiterals: Record<string, string>,
+  extractedValues: string[] = []
+): Checkpoint | undefined {
   const beforeLines = new Set(step.pageTextBefore.split("\n").map((l) => l.trim()).filter(Boolean));
+  const perRecord = extractedValues.map((v) => v.trim()).filter((v) => v.length >= 3);
   const newLines = step.pageTextAfter
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !beforeLines.has(l));
+    .filter((l) => l && !beforeLines.has(l))
+    .filter((l) => !perRecord.some((v) => l.includes(v)));
 
   if (newLines.length > 0) {
     const candidates = newLines.map((line) => {
       const tokenized = tokenize(line.slice(0, 100), paramLiterals);
       const leftoverDigits = (tokenized.match(/\d/g) ?? []).length;
-      return { tokenized, leftoverDigits };
+      const isDataRow = tokenized.includes("\t") ? 1 : 0;
+      return { tokenized, leftoverDigits, isDataRow };
     });
-    candidates.sort((a, b) => a.leftoverDigits - b.leftoverDigits || a.tokenized.length - b.tokenized.length);
+    candidates.sort(
+      (a, b) =>
+        a.isDataRow - b.isDataRow || a.leftoverDigits - b.leftoverDigits || a.tokenized.length - b.tokenized.length
+    );
     const snippet = candidates[0]!.tokenized;
     return { description: `page shows new text: ${snippet}`, textContains: snippet };
   }
@@ -69,12 +89,20 @@ export function compileArtifact(opts: {
   outputDescriptions?: Record<string, string>;
   version?: number;
 }): CapabilityArtifact {
+  // A parameter is sensitive when the field that consumed it was flagged
+  // sensitive by the surface (a password box, an SSN-shaped label, ...).
+  // This was hardcoded `false`, which made the flag unreachable: the schema
+  // carried it and compilation could *throw* over a sensitive literal, but
+  // no artifact could ever actually mark a parameter as one.
+  const sensitiveParams = new Set(
+    opts.steps.filter((s) => s.sensitive && s.literalValue !== undefined).map((s) => s.literalValue)
+  );
   const inputs: InputParam[] = Object.entries(opts.paramLiterals).map(([name, literal]) => ({
     name,
     type: inferType(literal),
     description: opts.paramDescriptions?.[name] ?? `Input parameter: ${name}`,
     required: true,
-    sensitive: false,
+    sensitive: sensitiveParams.has(literal),
   }));
 
   // finish_success can *say* it produced a value without the agent ever
@@ -115,7 +143,7 @@ export function compileArtifact(opts: {
       }
     }
     if (s.extractTo) step.extractTo = s.extractTo;
-    const checkpoint = deriveCheckpoint(s, opts.paramLiterals);
+    const checkpoint = deriveCheckpoint(s, opts.paramLiterals, Object.values(opts.outputsDeclared).map(String));
     if (checkpoint) step.checkpoint = checkpoint;
     return step;
   });
