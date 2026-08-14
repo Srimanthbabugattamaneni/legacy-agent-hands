@@ -1,0 +1,36 @@
+{
+  "name": "legacy-agent-hands",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Record-once / replay-many capability engine for legacy bank back-office apps.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "mock": "tsx apps/mock-bank/server.ts",
+    "discover": "tsx src/cli.ts discover",
+    "replay": "tsx src/cli.ts replay",
+    "catalog": "tsx src/cli.ts catalog",
+    "operator": "tsx src/escalation/operator/server.ts",
+    "schema:export": "tsx src/schema/export.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "express": "^4.21.2",
+    "playwright": "^1.49.1",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

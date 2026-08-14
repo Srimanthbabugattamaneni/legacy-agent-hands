@@ -1,0 +1,10 @@
+{"ts":"2026-08-14T05:49:35.969Z","event":"replay_started","artifactId":"lookup-balance_573f0fd0","version":1,"params":{"memberId":"10567"}}
+{"ts":"2026-08-14T05:49:36.098Z","event":"step_started","stepId":"step_cb4e4e9b","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
+{"ts":"2026-08-14T05:49:36.129Z","event":"step_succeeded","stepId":"step_cb4e4e9b"}
+{"ts":"2026-08-14T05:49:36.129Z","event":"step_started","stepId":"step_369b4ffc","action":"click","description":"click button \"Search\""}
+{"ts":"2026-08-14T05:49:36.185Z","event":"step_succeeded","stepId":"step_369b4ffc"}
+{"ts":"2026-08-14T05:49:36.185Z","event":"step_started","stepId":"step_3bbb1a7e","action":"extract","description":"extract \"savingsBalance\" from cell \"Savings Balance\" -> \"$4231.09\""}
+{"ts":"2026-08-14T05:49:36.195Z","event":"step_succeeded","stepId":"step_3bbb1a7e"}
+{"ts":"2026-08-14T05:49:36.196Z","event":"step_started","stepId":"step_42792768","action":"extract","description":"extract \"checkingBalance\" from cell \"Checking Balance\" -> \"$812.44\""}
+{"ts":"2026-08-14T05:49:36.199Z","event":"step_succeeded","stepId":"step_42792768"}
+{"ts":"2026-08-14T05:49:36.217Z","event":"replay_finished","result":{"artifactId":"lookup-balance_573f0fd0","artifactVersion":1,"startedAt":"2026-08-14T05:49:35.969Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-[REDACTED:credit_card]","status":"success","outputs":{"savingsBalance":"$18902.50","checkingBalance":"$3004.12"},"finishedAt":"2026-08-14T05:49:36.217Z"}}

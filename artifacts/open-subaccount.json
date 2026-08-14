@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0",
+  "id": "open-subaccount_dd3e26f9",
+  "name": "open-subaccount",
+  "version": 1,
+  "description": "Open a new Savings sub-account for a member with a given initial deposit.",
+  "goal": "Set the Account Type dropdown to exactly 'Savings', enter 100 as the Initial Deposit, click Continue to reach the review screen, then click Confirm & Open Account to finish opening the Savings sub-account for this member",
+  "createdAt": "2026-08-14T05:48:21.361Z",
+  "target": {
+    "appId": "mock-bank",
+    "entryUrl": "http://localhost:4000/members/20001/new-subaccount"
+  },
+  "inputs": [
+    {
+      "name": "memberId",
+      "type": "number",
+      "description": "Input parameter: memberId",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "deposit",
+      "type": "number",
+      "description": "Input parameter: deposit",
+      "required": true,
+      "sensitive": false
+    }
+  ],
+  "outputs": [],
+  "steps": [
+    {
+      "id": "step_6154315e",
+      "action": "select",
+      "description": "select \"Savings\" in combobox \"Account Type\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "combobox",
+          "name": "Account Type",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "#acctType",
+            "nth": 0
+          },
+          {
+            "strategy": "text",
+            "text": "Account Type",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2) > select:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "value": {
+        "kind": "literal",
+        "value": "Savings"
+      },
+      "risky": false
+    },
+    {
+      "id": "step_5ebc9635",
+      "action": "fill",
+      "description": "fill textbox \"Initial Deposit\" with \"{{deposit}}\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "textbox",
+          "name": "Initial Deposit",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "#deposit",
+            "nth": 0
+          },
+          {
+            "strategy": "text",
+            "text": "Initial Deposit",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2) > input:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "value": {
+        "kind": "param",
+        "name": "deposit"
+      },
+      "risky": false
+    },
+    {
+      "id": "step_86ff51f2",
+      "action": "click",
+      "description": "click button \"Continue\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "button",
+          "name": "Continue",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "text",
+            "text": "Continue",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(1) > button:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "checkpoint": {
+        "description": "page shows new text: Cancel",
+        "textContains": "Cancel"
+      },
+      "risky": false
+    },
+    {
+      "id": "step_cfdaac54",
+      "action": "click",
+      "description": "click button \"Confirm & Open Account\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "button",
+          "name": "Confirm & Open Account",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "text",
+            "text": "Confirm & Open Account",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > button:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "checkpoint": {
+        "description": "page shows new text: Sub-Account Opened Successfully",
+        "textContains": "Sub-Account Opened Successfully"
+      },
+      "risky": true
+    }
+  ],
+  "successCheckpoint": {
+    "description": "page shows new text: Sub-Account Opened Successfully",
+    "textContains": "Sub-Account Opened Successfully"
+  }
+}

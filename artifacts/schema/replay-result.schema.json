@@ -1,0 +1,205 @@
+{
+  "$ref": "#/definitions/ReplayResult",
+  "definitions": {
+    "ReplayResult": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "type": "string"
+            },
+            "artifactVersion": {
+              "type": "number"
+            },
+            "startedAt": {
+              "type": "string"
+            },
+            "finishedAt": {
+              "type": "string"
+            },
+            "evidenceDir": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "success"
+            },
+            "outputs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          },
+          "required": [
+            "artifactId",
+            "artifactVersion",
+            "startedAt",
+            "finishedAt",
+            "evidenceDir",
+            "status",
+            "outputs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactId"
+            },
+            "artifactVersion": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactVersion"
+            },
+            "startedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/startedAt"
+            },
+            "finishedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/finishedAt"
+            },
+            "evidenceDir": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/evidenceDir"
+            },
+            "status": {
+              "type": "string",
+              "const": "business_outcome"
+            },
+            "outcome": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            },
+            "stepId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifactId",
+            "artifactVersion",
+            "startedAt",
+            "finishedAt",
+            "evidenceDir",
+            "status",
+            "outcome",
+            "detail",
+            "stepId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactId"
+            },
+            "artifactVersion": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactVersion"
+            },
+            "startedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/startedAt"
+            },
+            "finishedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/finishedAt"
+            },
+            "evidenceDir": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/evidenceDir"
+            },
+            "status": {
+              "type": "string",
+              "const": "failure"
+            },
+            "errorClass": {
+              "type": "string",
+              "enum": [
+                "element_not_found",
+                "checkpoint_failed",
+                "unexpected_dialog",
+                "session_timeout",
+                "transient_load_failure",
+                "policy_blocked",
+                "unknown"
+              ]
+            },
+            "stepId": {
+              "type": "string"
+            },
+            "expected": {
+              "type": "string"
+            },
+            "observed": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifactId",
+            "artifactVersion",
+            "startedAt",
+            "finishedAt",
+            "evidenceDir",
+            "status",
+            "errorClass",
+            "stepId",
+            "expected",
+            "observed"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactId"
+            },
+            "artifactVersion": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/artifactVersion"
+            },
+            "startedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/startedAt"
+            },
+            "finishedAt": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/finishedAt"
+            },
+            "evidenceDir": {
+              "$ref": "#/definitions/ReplayResult/anyOf/0/properties/evidenceDir"
+            },
+            "status": {
+              "type": "string",
+              "const": "escalated"
+            },
+            "escalationId": {
+              "type": "string"
+            },
+            "stepId": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "resolution": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifactId",
+            "artifactVersion",
+            "startedAt",
+            "finishedAt",
+            "evidenceDir",
+            "status",
+            "escalationId",
+            "stepId",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

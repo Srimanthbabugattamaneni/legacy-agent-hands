@@ -1,0 +1,155 @@
+{
+  "schemaVersion": "1.0",
+  "id": "lookup-balance_573f0fd0",
+  "name": "lookup-balance",
+  "version": 1,
+  "description": "Look up a member by ID and read their current savings and checking balances.",
+  "goal": "Look up member 10234 and read their current savings and checking balance",
+  "createdAt": "2026-08-14T05:47:47.093Z",
+  "target": {
+    "appId": "mock-bank",
+    "entryUrl": "http://localhost:4000/"
+  },
+  "inputs": [
+    {
+      "name": "memberId",
+      "type": "number",
+      "description": "Input parameter: memberId",
+      "required": true,
+      "sensitive": false
+    }
+  ],
+  "outputs": [
+    {
+      "name": "checkingBalance",
+      "type": "string",
+      "description": "Extracted value: checkingBalance"
+    },
+    {
+      "name": "savingsBalance",
+      "type": "string",
+      "description": "Extracted value: savingsBalance"
+    }
+  ],
+  "steps": [
+    {
+      "id": "step_cb4e4e9b",
+      "action": "fill",
+      "description": "fill textbox \"Member ID\" with \"{{memberId}}\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "textbox",
+          "name": "Member ID",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "#q",
+            "nth": 0
+          },
+          {
+            "strategy": "text",
+            "text": "Member ID",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2) > input:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "value": {
+        "kind": "param",
+        "name": "memberId"
+      },
+      "risky": false
+    },
+    {
+      "id": "step_369b4ffc",
+      "action": "click",
+      "description": "click button \"Search\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "button",
+          "name": "Search",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "text",
+            "text": "Search",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(3) > button:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "checkpoint": {
+        "description": "page shows new text: Sub-Accounts",
+        "textContains": "Sub-Accounts"
+      },
+      "risky": false
+    },
+    {
+      "id": "step_3bbb1a7e",
+      "action": "extract",
+      "description": "extract \"savingsBalance\" from cell \"Savings Balance\" -> \"$4231.09\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"Savings Balance\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(4) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "savingsBalance",
+      "risky": false
+    },
+    {
+      "id": "step_42792768",
+      "action": "extract",
+      "description": "extract \"checkingBalance\" from cell \"Checking Balance\" -> \"$812.44\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"Checking Balance\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(5) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "checkingBalance",
+      "risky": false
+    }
+  ],
+  "successCheckpoint": {
+    "description": "page shows new text: Sub-Accounts",
+    "textContains": "Sub-Accounts"
+  }
+}

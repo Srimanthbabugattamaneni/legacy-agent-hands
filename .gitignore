@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+# Evidence screenshots/snapshots are committed as demo artifacts, but keep transient ones out:
+evidence/tmp/
+# Runs produced by the test suite's own fixture artifacts (name-prefixed "test-") — noise, not demo evidence:
+evidence/*-test-*/
+playwright-report/
+test-results/
+scratch-*.ts

@@ -1,0 +1,166 @@
+import { describe, it, expect } from "vitest";
+import { compileArtifact } from "../src/agent/compileArtifact.js";
+import type { DiscoveryStepRecord } from "../src/agent/types.js";
+
+function record(partial: Partial<DiscoveryStepRecord> & Pick<DiscoveryStepRecord, "id" | "action">): DiscoveryStepRecord {
+  return {
+    description: "",
+    urlBefore: "http://localhost:4000/",
+    urlAfter: "http://localhost:4000/",
+    pageTextBefore: "",
+    pageTextAfter: "",
+    risky: false,
+    ...partial,
+  };
+}
+
+describe("compileArtifact", () => {
+  it("turns a literal that matches a declared param into a param reference", () => {
+    const steps: DiscoveryStepRecord[] = [
+      record({
+        id: "s1",
+        action: "fill",
+        description: 'fill textbox "Member ID" with "10234"',
+        literalValue: "10234",
+        pageTextBefore: "Member Lookup",
+        pageTextAfter: "Member Lookup",
+      }),
+      record({ id: "s2", action: "extract", extractTo: "savingsBalance" }),
+    ];
+    const artifact = compileArtifact({
+      id: "cap_1",
+      name: "lookup-balance",
+      description: "test",
+      goal: "look up member 10234",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps,
+      paramLiterals: { memberId: "10234" },
+      outputsDeclared: { savingsBalance: "$4231.09" },
+    });
+
+    expect(artifact.inputs).toEqual([
+      { name: "memberId", type: "number", description: "Input parameter: memberId", required: true, sensitive: false },
+    ]);
+    expect(artifact.steps[0]!.value).toEqual({ kind: "param", name: "memberId" });
+    expect(artifact.outputs[0]).toMatchObject({ name: "savingsBalance", type: "string" });
+  });
+
+  it("keeps a literal that doesn't match any declared param as-is", () => {
+    const steps: DiscoveryStepRecord[] = [
+      record({ id: "s1", action: "select", literalValue: "Savings" }),
+    ];
+    const artifact = compileArtifact({
+      id: "cap_2",
+      name: "open-subaccount",
+      description: "test",
+      goal: "open a sub-account",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps,
+      paramLiterals: { memberId: "20001" },
+      outputsDeclared: {},
+    });
+    expect(artifact.steps[0]!.value).toEqual({ kind: "literal", value: "Savings" });
+  });
+
+  it("derives a checkpoint from newly-appeared page text, tokenizing known param literals", () => {
+    const steps: DiscoveryStepRecord[] = [
+      record({
+        id: "s1",
+        action: "click",
+        pageTextBefore: "Member Lookup",
+        pageTextAfter: "Member Lookup\nMember Detail\nMember ID\n10234\nSavings Balance\n$4231.09",
+        urlBefore: "http://localhost:4000/",
+        urlAfter: "http://localhost:4000/members/10234",
+      }),
+    ];
+    const artifact = compileArtifact({
+      id: "cap_3",
+      name: "lookup-balance",
+      description: "test",
+      goal: "look up member 10234",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps,
+      paramLiterals: { memberId: "10234" },
+      outputsDeclared: {},
+    });
+    const cp = artifact.steps[0]!.checkpoint;
+    expect(cp?.textContains).toBeDefined();
+    expect(cp?.textContains).not.toContain("10234");
+  });
+
+  it("prefers a digit-free stable line over a longer line with un-parameterized per-record data", () => {
+    // Regression: the real mock-bank page renders a table row as one
+    // tab-joined line ("Savings\tSV-10234-1\t$4231.09") that contains BOTH
+    // the declared memberId param (tokenizable) AND a dollar balance that
+    // isn't a declared param — picking "longest new line" chose that row,
+    // producing a checkpoint hardcoded to one record's balance and failing
+    // replay for every other member. A safe, generic candidate ("Member
+    // Detail") must win instead.
+    const steps: DiscoveryStepRecord[] = [
+      record({
+        id: "s1",
+        action: "click",
+        pageTextBefore: "Member Lookup",
+        pageTextAfter: "Member Lookup\nMember Detail\nSavings\tSV-10234-1\t$4231.09",
+        urlBefore: "http://localhost:4000/",
+        urlAfter: "http://localhost:4000/members/10234",
+      }),
+    ];
+    const artifact = compileArtifact({
+      id: "cap_3b",
+      name: "lookup-balance",
+      description: "test",
+      goal: "look up member 10234",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps,
+      paramLiterals: { memberId: "10234" },
+      outputsDeclared: {},
+    });
+    expect(artifact.steps[0]!.checkpoint?.textContains).toBe("Member Detail");
+  });
+
+  it("refuses to persist a literal from a field flagged sensitive without a declared param", () => {
+    const steps: DiscoveryStepRecord[] = [
+      record({ id: "s1", action: "fill", literalValue: "hunter2", sensitive: true }),
+    ];
+    expect(() =>
+      compileArtifact({
+        id: "cap_4",
+        name: "bad",
+        description: "test",
+        goal: "test",
+        appId: "mock-bank",
+        entryUrl: "http://localhost:4000/",
+        steps,
+        paramLiterals: {},
+        outputsDeclared: {},
+      })
+    ).toThrow(/sensitive/);
+  });
+
+  it("drops a declared output with no backing extract step, keeps one that has one", () => {
+    // Regression: finish_success can claim an output was captured without
+    // the agent ever calling extract for it (seen in practice — a weaker
+    // model fabricated a value instead of extracting one). An artifact
+    // must not promise an output replay can never actually produce.
+    const steps: DiscoveryStepRecord[] = [
+      record({ id: "s1", action: "extract", extractTo: "accountType", literalValue: undefined }),
+    ];
+    const artifact = compileArtifact({
+      id: "cap_5",
+      name: "open-subaccount",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps,
+      paramLiterals: {},
+      outputsDeclared: { accountType: "Savings", accountNumber: "[REDACTED]" },
+    });
+    expect(artifact.outputs.map((o) => o.name)).toEqual(["accountType"]);
+  });
+});

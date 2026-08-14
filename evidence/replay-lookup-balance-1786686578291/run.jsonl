@@ -1,0 +1,6 @@
+{"ts":"2026-08-14T05:49:38.291Z","event":"replay_started","artifactId":"lookup-balance_573f0fd0","version":1,"params":{"memberId":"99999"}}
+{"ts":"2026-08-14T05:49:38.423Z","event":"step_started","stepId":"step_cb4e4e9b","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
+{"ts":"2026-08-14T05:49:38.456Z","event":"step_succeeded","stepId":"step_cb4e4e9b"}
+{"ts":"2026-08-14T05:49:38.456Z","event":"step_started","stepId":"step_369b4ffc","action":"click","description":"click button \"Search\""}
+{"ts":"2026-08-14T05:49:38.491Z","event":"business_outcome","outcome":"session_timeout","stepId":"step_369b4ffc"}
+{"ts":"2026-08-14T05:49:38.491Z","event":"replay_finished","result":{"artifactId":"lookup-balance_573f0fd0","artifactVersion":1,"startedAt":"2026-08-14T05:49:38.291Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-[REDACTED:credit_card]","status":"business_outcome","outcome":"session_timeout","detail":"The back-office session expired and requires re-login.","stepId":"step_369b4ffc","finishedAt":"2026-08-14T05:49:38.491Z"}}

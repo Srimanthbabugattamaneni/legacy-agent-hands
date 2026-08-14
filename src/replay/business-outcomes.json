@@ -1,0 +1,9 @@
+{
+  "mock-bank": [
+    { "outcome": "member_not_found", "textContains": "No matching member found", "detail": "The requested member ID does not exist in this system." },
+    { "outcome": "permission_denied", "textContains": "Access Denied", "detail": "The member record requires elevated permissions this session does not have." },
+    { "outcome": "session_timeout", "textContains": "Session Expired", "detail": "The back-office session expired and requires re-login." },
+    { "outcome": "validation_error", "textContains": "must be at least $25.00", "detail": "The submitted form failed server-side validation." },
+    { "outcome": "invalid_input", "textContains": "Please enter a numeric Member ID", "detail": "The supplied search input was not a valid member ID." }
+  ]
+}

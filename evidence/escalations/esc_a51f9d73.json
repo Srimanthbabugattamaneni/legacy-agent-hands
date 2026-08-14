@@ -1,0 +1,13 @@
+{
+  "id": "esc_a51f9d73",
+  "createdAt": "2026-08-14T05:51:07.499Z",
+  "reason": "risky_action_needs_confirmation",
+  "goalOrCapability": "open-subaccount v1",
+  "currentStepDescription": "click button \"Confirm & Open Account\"",
+  "detail": "risky step requires explicit allowRisky authorization",
+  "screenshotPath": "/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786686666934/escalation-1786686667465.png",
+  "status": "resolved",
+  "humanActions": [],
+  "humanNotes": "Reviewed the review-and-confirm screen (member Sam Whitfield, Savings, $100 initial deposit) against the request ticket — matches, this authorization is expected and safe. Approved by an ops reviewer via the operator console; not proceeding with the live browser action itself since risky-step replay resumption is intentionally out of scope (see REPORT.md Cuts).",
+  "resolvedAt": "2026-08-14T05:51:32.570Z"
+}

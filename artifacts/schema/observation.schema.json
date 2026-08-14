@@ -1,0 +1,79 @@
+{
+  "$ref": "#/definitions/Observation",
+  "definitions": {
+    "Observation": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "pageText": {
+          "type": "string"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "tag": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "href": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "checked": {
+                "type": "boolean"
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "sensitive": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "ref",
+              "tag",
+              "role",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "url",
+        "title",
+        "pageText",
+        "elements"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

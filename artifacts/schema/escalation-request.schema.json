@@ -1,0 +1,80 @@
+{
+  "$ref": "#/definitions/EscalationRequest",
+  "definitions": {
+    "EscalationRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "discovery_stuck",
+            "replay_unrecoverable",
+            "risky_action_needs_confirmation"
+          ]
+        },
+        "goalOrCapability": {
+          "type": "string"
+        },
+        "currentStepDescription": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "screenshotPath": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "resolved"
+          ],
+          "default": "pending"
+        },
+        "humanNotes": {
+          "type": "string"
+        },
+        "humanActions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "description"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "resolvedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "createdAt",
+        "reason",
+        "goalOrCapability",
+        "currentStepDescription",
+        "detail"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
