@@ -31,8 +31,9 @@ CLI (src/cli.ts)
   ├─ replay    → src/replay     (deterministic execution, no LLM)
   └─ catalog   → src/catalog    (lists/exposes recorded artifacts)
        both agent and replay drive:
-         src/surface  (Surface interface: observe/click/fill/.../resolveElementToLocator)
-           └─ src/surface/browserSurface.ts (Playwright implementation)
+         src/surface/types.ts  (role interfaces: Perception / Actions / Signals / Session)
+           └─ browserSurface.ts + locatorResolver.ts (the Playwright implementation,
+              the only code in the repo that imports Playwright)
        both are constrained by:
          src/safety   (allowlist policy, redaction)
        both can raise:
@@ -41,9 +42,22 @@ CLI (src/cli.ts)
     src/schema (CapabilityArtifact, Observation, ReplayResult, EscalationRequest — Zod)
 ```
 
-The load-bearing decision is the **`Surface` interface** (`src/surface/types.ts`): discovery,
-replay, and artifact compilation only ever call `observe()`/`click()`/`fill()`/etc. — never
-Playwright directly. `BrowserSurface` is the only implementation today, but nothing above that
+The load-bearing decision is the **`Surface` seam** (`src/surface/types.ts`): discovery, replay, and
+artifact compilation only ever call `observe()`/`click()`/`fill()`/etc. — never Playwright directly.
+It is split into role interfaces (`SurfacePerception`, `SurfaceActions`, `SurfaceSignals`,
+`SurfaceSession`) so each consumer declares the narrowest capability it needs — `verifyCheckpoint`
+reads and waits, and has no access to `close()`.
+
+Worth being precise about how that is enforced, because for a while it wasn't. The interface
+existed and the write-up claimed the engine was surface-agnostic, but every consumer was *typed
+against the concrete `BrowserSurface`* — the abstraction was documentation, not a seam, and a
+desktop implementation would not in fact have dropped in. Consumers now depend on the interfaces,
+`replay()` takes an injectable `createSurface` (defaulting to the browser), and
+`tests/surfaceSeam.test.ts` drives the real replay engine against an in-memory `Surface` with no
+DOM, no Playwright, and no network. The claim is now checkable rather than asserted, and it stops
+compiling if someone reintroduces a concrete dependency above the seam.
+
+`BrowserSurface` is the only production implementation today, but nothing above that
 seam knows it's a browser. That's the seam the heterogeneity story in §4 depends on.
 
 Discovery is a straight observe → decide → act loop: snapshot the page into a structured

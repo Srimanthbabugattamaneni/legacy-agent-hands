@@ -22,7 +22,10 @@ describe("redact", () => {
     // own evidenceDir pointer in 13 committed files.
     const dir = "/evidence/replay-open-subaccount-1786720224866";
     expect(redactText(dir)).toBe(dir);
-    expect(redactText(String(Date.now()))).toBe(String(Date.now()));
+    // Captured once: calling Date.now() separately for the input and the
+    // expectation makes the assertion race the millisecond boundary.
+    const now = String(Date.now());
+    expect(redactText(now)).toBe(now);
   });
 
   it("still redacts real card numbers, separated or not", () => {

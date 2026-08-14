@@ -4,10 +4,8 @@ import { ElementNotFoundError, PolicyViolationError } from "./types.js";
 import type { LocatorDescriptor, LocatorStrategy } from "../schema/locator.js";
 import type { Observation } from "../schema/observation.js";
 import { collectInteractiveElements, type RawElementInfo } from "./domSnapshot.js";
+import { LocatorResolver } from "./locatorResolver.js";
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 const SAFE_HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -27,6 +25,7 @@ export class BrowserSurface implements Surface {
   private navigation: NavigationInfo | undefined;
   private violation: PolicyViolation | undefined;
   private dialog: DialogInfo | undefined;
+  private locators: LocatorResolver;
 
   private constructor(
     private browser: Browser,
@@ -34,6 +33,7 @@ export class BrowserSurface implements Surface {
     private page: Page,
     private guard: NavigationGuard
   ) {
+    this.locators = new LocatorResolver(page);
     page.on("response", (res) => {
       const request = res.request();
       if (request.resourceType() !== "document") return;
@@ -112,12 +112,6 @@ export class BrowserSurface implements Surface {
     });
   }
 
-  /** Exposes the live Playwright Page for the escalation/operator handoff —
-   * the same session a human takes over, never a fresh one. */
-  get livePage(): Page {
-    return this.page;
-  }
-
   async observe(): Promise<Observation> {
     const raw = await evalInPage(this.page, collectInteractiveElements);
     this.lastElements = new Map(raw.map((r) => [r.ref, r]));
@@ -146,86 +140,11 @@ export class BrowserSurface implements Surface {
     };
   }
 
+
+
+
   resolveElementToLocator(ref: string): LocatorDescriptor {
-    const raw = this.lastElements.get(ref);
-    if (!raw) throw new Error(`unknown element ref (stale observation?): ${ref}`);
-
-    // A label/value data cell: the cell's own text *is* the value, which
-    // changes per record, so it can't be its own locator (that's the whole
-    // point of recording once and replaying for different inputs). Locate
-    // it via the adjacent label instead, which is stable across records.
-    if (raw.label) {
-      const lbl = escapeXPathLiteral(raw.label);
-      return {
-        primary: {
-          strategy: "css",
-          selector: `xpath=//td[b[normalize-space(text())=${lbl}]]/following-sibling::td[1]`,
-          nth: 0,
-        },
-        fallbacks: [{ strategy: "css", selector: raw.cssPath, nth: 0 }],
-        reasoning:
-          "value cells are keyed off their stable adjacent label via XPath, not their own " +
-          "(per-record, changing) text; a structural CSS path is the fallback if the label " +
-          "markup itself changes.",
-      };
-    }
-
-    const strategies: LocatorStrategy[] = [];
-    const hasUsableName = raw.name && raw.role !== "generic";
-
-    if (hasUsableName) {
-      strategies.push({ strategy: "role", role: raw.role, name: raw.name, nameMatch: "exact", nth: raw.nth });
-    }
-    if (raw.id) {
-      strategies.push({ strategy: "css", selector: `#${cssEscape(raw.id)}`, nth: 0 });
-    }
-    if (raw.name && raw.name.length <= 80) {
-      strategies.push({ strategy: "text", text: raw.name, exact: false, nth: raw.nth });
-    }
-    strategies.push({ strategy: "css", selector: raw.cssPath, nth: 0 });
-
-    const [primary, ...fallbacks] = strategies;
-    return {
-      primary: primary!,
-      fallbacks,
-      reasoning:
-        "role+accessible-name is preferred as the most tenant/version-stable strategy; " +
-        "id and text are secondary; a structural CSS path is the last-resort fallback " +
-        "since it breaks the moment layout changes.",
-    };
-  }
-
-  private async resolveLocator(descriptor: LocatorDescriptor): Promise<Locator> {
-    const candidates = [descriptor.primary, ...descriptor.fallbacks];
-    for (const s of candidates) {
-      const loc = this.buildLocator(s);
-      try {
-        const count = await loc.count();
-        if (count >= 1) return loc;
-      } catch {
-        // malformed selector etc — try next strategy
-      }
-    }
-    throw new ElementNotFoundError(descriptor);
-  }
-
-  private buildLocator(s: LocatorStrategy): Locator {
-    switch (s.strategy) {
-      case "role":
-        return this.page
-          .getByRole(s.role as Parameters<Page["getByRole"]>[0], {
-            name: s.nameMatch === "exact" ? s.name : new RegExp(escapeRegExp(s.name), "i"),
-          })
-          .nth(s.nth);
-      case "label":
-        return this.page.getByLabel(s.label).nth(s.nth);
-      case "text":
-        return this.page.getByText(s.text, { exact: s.exact }).nth(s.nth);
-      case "css":
-        return this.page.locator(s.selector).nth(s.nth);
-      case "testid":
-        return this.page.getByTestId(s.testId);
-    }
+    return this.locators.describe(this.lastElements.get(ref), ref);
   }
 
   async navigate(url: string): Promise<void> {
@@ -240,7 +159,7 @@ export class BrowserSurface implements Surface {
   }
 
   async click(locator: LocatorDescriptor): Promise<void> {
-    const loc = await this.resolveLocator(locator);
+    const loc = await this.locators.resolve(locator);
     await Promise.all([
       this.page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {}),
       loc.click({ timeout: 8000 }),
@@ -248,23 +167,23 @@ export class BrowserSurface implements Surface {
   }
 
   async fill(locator: LocatorDescriptor, value: string): Promise<void> {
-    const loc = await this.resolveLocator(locator);
+    const loc = await this.locators.resolve(locator);
     await loc.fill(value, { timeout: 8000 });
   }
 
   async select(locator: LocatorDescriptor, value: string): Promise<void> {
-    const loc = await this.resolveLocator(locator);
+    const loc = await this.locators.resolve(locator);
     await loc.selectOption(value, { timeout: 8000 });
   }
 
   async check(locator: LocatorDescriptor, checked: boolean): Promise<void> {
-    const loc = await this.resolveLocator(locator);
+    const loc = await this.locators.resolve(locator);
     await loc.setChecked(checked, { timeout: 8000 });
   }
 
   async pressKey(locator: LocatorDescriptor | undefined, key: string): Promise<void> {
     if (locator) {
-      const loc = await this.resolveLocator(locator);
+      const loc = await this.locators.resolve(locator);
       await loc.press(key, { timeout: 8000 });
     } else {
       await this.page.keyboard.press(key);
@@ -276,7 +195,7 @@ export class BrowserSurface implements Surface {
     const perStrategy = Math.max(1000, Math.floor(timeoutMs / candidates.length));
     for (const s of candidates) {
       try {
-        await this.buildLocator(s).waitFor({ state: "visible", timeout: perStrategy });
+        await this.locators.build(s).waitFor({ state: "visible", timeout: perStrategy });
         return;
       } catch {
         // try next strategy
@@ -286,7 +205,7 @@ export class BrowserSurface implements Surface {
   }
 
   async extractText(locator: LocatorDescriptor): Promise<string> {
-    const loc = await this.resolveLocator(locator);
+    const loc = await this.locators.resolve(locator);
     // Resolved by element kind rather than innerText-then-fallback: a
     // <select>'s innerText is the text of *every* option, so extracting from
     // a dropdown returned the whole list instead of the chosen value.
@@ -367,17 +286,4 @@ export class BrowserSurface implements Surface {
   }
 }
 
-/** Node-side CSS.escape equivalent (there is no `CSS` global outside a browser). */
-function cssEscape(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-}
 
-/** XPath has no escape sequence for quotes inside string literals; a value
- * containing both quote types needs concat(). Our labels are plain words,
- * so the common cases (no quotes, or only one quote type) cover it. */
-function escapeXPathLiteral(s: string): string {
-  if (!s.includes('"')) return `"${s}"`;
-  if (!s.includes("'")) return `'${s}'`;
-  const parts = s.split('"').map((p) => `"${p}"`);
-  return `concat(${parts.join(`,'"',`)})`;
-}

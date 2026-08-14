@@ -5,10 +5,19 @@ import { BrowserSurface } from "../surface/browserSurface.js";
 import { checkActionType, checkNavigation, checkStepAuthorization } from "../safety/policy.js";
 import { loadBusinessOutcomes, matchBusinessOutcome } from "./businessOutcomes.js";
 import { render } from "../util/template.js";
+import { coerceParams } from "./params.js";
+import { execStep } from "./executor.js";
+import { verifyCheckpoint } from "./checkpoint.js";
 import { RunLogger } from "../util/logger.js";
 import { slugify } from "../util/ids.js";
 import { createEscalation, waitForResolution } from "../escalation/escalate.js";
 import { ElementNotFoundError, PolicyViolationError } from "../surface/types.js";
+import type {
+  NavigationGuard,
+  Surface,
+  SurfacePerception,
+  SurfaceSession,
+} from "../surface/types.js";
 
 export type ReplayOptions = {
   artifact: CapabilityArtifact;
@@ -20,28 +29,16 @@ export type ReplayOptions = {
   escalateOnRisky?: boolean;
   /** If a hard failure occurs, raise a human escalation instead of just failing. */
   escalateOnHardFailure?: boolean;
+  /**
+   * How to obtain the surface. Defaults to a real browser; overridable so the
+   * engine can be driven against any Surface implementation. This is what
+   * makes the seam in §4 real rather than asserted — the replay engine has no
+   * compile-time dependency on the browser beyond this default.
+   */
+  createSurface?: (opts: { headless: boolean; guard: NavigationGuard }) => Promise<Surface>;
 };
 
-function coerceParams(artifact: CapabilityArtifact, supplied: Record<string, string | number | boolean>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const input of artifact.inputs) {
-    const value = supplied[input.name];
-    // Only absent is missing. An empty string is a value the caller chose to
-    // send — and often the interesting one, since it exercises the target's
-    // own required-field validation, which is a business outcome we want to
-    // report rather than an error we refuse to attempt.
-    if (value === undefined || value === null) {
-      if (input.required) throw new Error(`missing required input parameter: ${input.name}`);
-      continue;
-    }
-    out[input.name] = String(value);
-  }
-  return out;
-}
 
-function resolveValue(ref: { kind: "literal"; value: string } | { kind: "param"; name: string }, params: Record<string, string>): string {
-  return ref.kind === "literal" ? ref.value : params[ref.name] ?? "";
-}
 
 export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   const { artifact } = opts;
@@ -68,7 +65,8 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   // The guard enforces the allowlist at the network layer for the whole
   // session, covering navigations this loop never initiates (clicks, form
   // submits, redirects) as well as the ones it does.
-  const surface = await BrowserSurface.create({ headless, guard: (url) => checkNavigation(url) });
+  const createSurface = opts.createSurface ?? ((o) => BrowserSurface.create(o));
+  const surface = await createSurface({ headless, guard: (url) => checkNavigation(url) });
   const outcomeRules = loadBusinessOutcomes(artifact.target.appId);
   const outputs: Record<string, string | number | boolean> = {};
 
@@ -273,7 +271,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
     goalOrCapability: string;
     currentStepDescription: string;
     detail: string;
-    surface: BrowserSurface;
+    surface: SurfaceSession & SurfacePerception;
     logger: RunLogger;
   }) {
     const screenshotPath = input.logger.artifactPath(`escalation-${Date.now()}.png`);
@@ -293,7 +291,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   }
 
   async function runStepWithRetry(
-    surface: BrowserSurface,
+    surface: Surface,
     step: ArtifactStep,
     params: Record<string, string>,
     outputs: Record<string, string | number | boolean>
@@ -359,79 +357,4 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   }
 }
 
-async function execStep(
-  surface: BrowserSurface,
-  step: ArtifactStep,
-  params: Record<string, string>,
-  outputs: Record<string, string | number | boolean>
-): Promise<void> {
-  switch (step.action) {
-    case "navigate": {
-      const url = render(step.url ? resolveValue(step.url, params) : "", params);
-      await surface.navigate(url);
-      return;
-    }
-    case "click":
-      await surface.click(step.locator!);
-      return;
-    case "fill":
-      await surface.fill(step.locator!, resolveValue(step.value!, params));
-      return;
-    case "select":
-      await surface.select(step.locator!, resolveValue(step.value!, params));
-      return;
-    case "check":
-      await surface.check(step.locator!, resolveValue(step.value!, params) === "true");
-      return;
-    case "press_key":
-      await surface.pressKey(step.locator, resolveValue(step.value!, params));
-      return;
-    case "wait_for":
-      await surface.waitFor(step.locator!);
-      return;
-    case "extract": {
-      const text = await surface.extractText(step.locator!);
-      if (step.extractTo) outputs[step.extractTo] = text;
-      return;
-    }
-  }
-}
 
-async function verifyCheckpoint(
-  surface: BrowserSurface,
-  checkpoint: NonNullable<ArtifactStep["checkpoint"]>,
-  params: Record<string, string>
-): Promise<{ pass: boolean; expected: string; observed: string }> {
-  // Every condition present is checked and they must all hold. Returning on
-  // the first one present meant a checkpoint carrying both urlContains and
-  // textContains — which the schema allows — silently verified only the URL,
-  // so it asserted less than it claimed to.
-  const checks: { pass: boolean; expected: string; observed: string }[] = [];
-
-  if (checkpoint.urlContains) {
-    const expected = render(checkpoint.urlContains, params);
-    const observed = surface.currentUrl();
-    checks.push({ pass: observed.includes(expected), expected: `URL contains "${expected}"`, observed });
-  }
-  if (checkpoint.textContains) {
-    const expected = render(checkpoint.textContains, params);
-    const observation = await surface.observe();
-    checks.push({
-      pass: observation.pageText.includes(expected),
-      expected: `page text contains "${expected}"`,
-      observed: observation.pageText.slice(0, 200),
-    });
-  }
-  if (checkpoint.locatorVisible) {
-    try {
-      await surface.waitFor(checkpoint.locatorVisible, 3000);
-      checks.push({ pass: true, expected: "locator visible", observed: "visible" });
-    } catch {
-      checks.push({ pass: false, expected: "locator visible", observed: "not found" });
-    }
-  }
-
-  if (checks.length === 0) return { pass: true, expected: "(no assertion)", observed: "(no assertion)" };
-  // Report the first failure so the error names the condition that broke.
-  return checks.find((c) => !c.pass) ?? { pass: true, expected: checks.map((c) => c.expected).join(" AND "), observed: "all conditions held" };
-}
