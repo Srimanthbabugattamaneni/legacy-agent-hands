@@ -291,7 +291,11 @@ app.get("/members/:id/archive", (req, res) => {
       `<h2>Archive Member Record</h2>
        <form method="GET" action="/members/${id}">
          <button type="submit" onclick="return confirm('Archive this member record? This cannot be undone.')">Archive Record</button>
-       </form>`
+       </form>
+       <!-- Off-allowlist route, on this deliberately unlinked page so the
+            click-escape test has a target without putting a stray control in
+            front of the discovery agent. -->
+       <p><a href="/admin/console">Admin Console</a></p>`
     )
   );
 });

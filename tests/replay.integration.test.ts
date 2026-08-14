@@ -48,7 +48,7 @@ afterAll(async () => {
 
 function lookupBalanceArtifact(): CapabilityArtifact {
   return {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     id: "test-lookup",
     name: "test-lookup-balance",
     version: 1,
@@ -65,14 +65,14 @@ function lookupBalanceArtifact(): CapabilityArtifact {
         description: 'fill "Member ID" with memberId',
         locator: { primary: { strategy: "role", role: "textbox", name: "Member ID", nameMatch: "exact", nth: 0 }, fallbacks: [] },
         value: { kind: "param", name: "memberId" },
-        risky: false,
+        effect: "read",
       },
       {
         id: "s2",
         action: "click",
         description: "click Search",
         locator: { primary: { strategy: "role", role: "button", name: "Search", nameMatch: "exact", nth: 0 }, fallbacks: [] },
-        risky: false,
+        effect: "read",
         checkpoint: { description: "member detail shown", textContains: "Savings Balance" },
       },
       {
@@ -84,7 +84,7 @@ function lookupBalanceArtifact(): CapabilityArtifact {
           fallbacks: [],
         },
         extractTo: "savingsBalance",
-        risky: false,
+        effect: "read",
       },
     ],
     successCheckpoint: { description: "balance extracted", textContains: "Savings Balance" },
@@ -93,7 +93,7 @@ function lookupBalanceArtifact(): CapabilityArtifact {
 
 function openSubaccountArtifact(): CapabilityArtifact {
   return {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     id: "test-open",
     name: "test-open-subaccount",
     version: 1,
@@ -113,7 +113,7 @@ function openSubaccountArtifact(): CapabilityArtifact {
         description: "select account type",
         locator: { primary: { strategy: "role", role: "combobox", name: "Account Type", nameMatch: "exact", nth: 0 }, fallbacks: [] },
         value: { kind: "literal", value: "Savings" },
-        risky: false,
+        effect: "read",
       },
       {
         id: "s2",
@@ -121,14 +121,16 @@ function openSubaccountArtifact(): CapabilityArtifact {
         description: "fill initial deposit",
         locator: { primary: { strategy: "role", role: "textbox", name: "Initial Deposit", nameMatch: "exact", nth: 0 }, fallbacks: [] },
         value: { kind: "param", name: "deposit" },
-        risky: false,
+        effect: "read",
       },
       {
         id: "s3",
         action: "click",
         description: "click Continue",
         locator: { primary: { strategy: "role", role: "button", name: "Continue", nameMatch: "exact", nth: 0 }, fallbacks: [] },
-        risky: false,
+        // A real POST that commits nothing: it renders the review screen.
+        // Ungated by default, which is the point of the two-tier model.
+        effect: "state_changing",
         checkpoint: { description: "review screen shown", textContains: "Review & Confirm New Sub-Account" },
       },
       {
@@ -139,7 +141,7 @@ function openSubaccountArtifact(): CapabilityArtifact {
           primary: { strategy: "role", role: "button", name: "Confirm & Open Account", nameMatch: "exact", nth: 0 },
           fallbacks: [],
         },
-        risky: true,
+        effect: "irreversible",
         checkpoint: { description: "success page shown", textContains: "Sub-Account Opened Successfully" },
       },
     ],
@@ -180,7 +182,7 @@ describe("replay of a compiled artifact honors its declared parameters", () => {
           urlAfter: `${baseUrl}/members/20001`,
           pageTextBefore: "",
           pageTextAfter: "",
-          risky: false,
+          effect: "read",
         },
       ],
       paramLiterals: { memberId: "20001" },
@@ -212,7 +214,7 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
 
   function artifact(steps: CapabilityArtifact["steps"], entryUrl: string): CapabilityArtifact {
     return {
-      schemaVersion: "1.0",
+      schemaVersion: "1.1",
       id: "test-policy",
       name: "test-policy",
       version: 1,
@@ -236,7 +238,7 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
             action: "navigate",
             description: "navigate off the allowlisted origin",
             url: { kind: "literal", value: `${OFF_ALLOWLIST_ORIGIN}/partner-portal` },
-            risky: false,
+            effect: "read",
           },
         ],
         `${baseUrl}/`
@@ -252,24 +254,54 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
     }
   }, 30000);
 
-  it("blocks a click onto a non-allowlisted route, and does not mask it as a business outcome", async () => {
-    // /login is reachable by clicking "Log In Again" on the session-expired
-    // page but matches no allowedRoutePattern. The page also carries the text
-    // that maps to the session_timeout business outcome, so this pins the
-    // precedence rule: a refused navigation is a guardrail breach, never a
-    // business result.
+  it("blocks a click onto a non-allowlisted route on the same origin", async () => {
+    // The off-allowlist link lives on the deliberately unlinked archive page,
+    // so it is reachable by this test without putting a stray control in
+    // front of the discovery agent. (/login used to serve this purpose, but
+    // it is allowlisted now — it is the app's own re-login path and a human
+    // needs it to complete a session-timeout handoff.)
     const result = await replay({
       artifact: artifact(
         [
           {
             id: "s1",
             action: "click",
-            description: "click Log In Again",
+            description: "click Admin Console",
             locator: {
-              primary: { strategy: "role", role: "button", name: "Log In Again", nameMatch: "exact", nth: 0 },
+              primary: { strategy: "role", role: "link", name: "Admin Console", nameMatch: "exact", nth: 0 },
               fallbacks: [],
             },
-            risky: false,
+            effect: "read",
+          },
+        ],
+        `${baseUrl}/members/10234/archive`
+      ),
+      params: {},
+      headless: true,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.errorClass).toBe("policy_blocked");
+      expect(result.observed).toContain("/admin/console");
+    }
+  }, 30000);
+
+  it("does not let a business-outcome page mask a blocked navigate step", async () => {
+    // A navigate step's pre-check *throws* rather than latching a violation,
+    // so it lands in the hard-failure branch where business-outcome matching
+    // runs. Starting on the session-expired page means an unguarded
+    // implementation reports `session_timeout` and the guardrail breach
+    // disappears. A refused navigation is never a business result.
+    const result = await replay({
+      artifact: artifact(
+        [
+          {
+            id: "s1",
+            action: "navigate",
+            description: "navigate to the admin console",
+            url: { kind: "literal", value: `${baseUrl}/admin/console` },
+            effect: "read",
           },
         ],
         `${baseUrl}/members/99999`
@@ -281,7 +313,6 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
     expect(result.status).toBe("failure");
     if (result.status === "failure") {
       expect(result.errorClass).toBe("policy_blocked");
-      expect(result.observed).toContain("/login");
     }
   }, 30000);
 
@@ -297,7 +328,7 @@ describe("allowlist enforcement covers navigation however it was triggered", () 
               primary: { strategy: "role", role: "link", name: "Partner Credit Portal", nameMatch: "exact", nth: 0 },
               fallbacks: [],
             },
-            risky: false,
+            effect: "read",
           },
         ],
         `${baseUrl}/members/10234`
@@ -322,7 +353,7 @@ describe("runtime conditions the recorded flow never saw", () => {
     // the ErrorClass enum with nothing anywhere able to produce it.
     const result = await replay({
       artifact: {
-        schemaVersion: "1.0",
+        schemaVersion: "1.1",
         id: "test-dialog",
         name: "test-dialog",
         version: 1,
@@ -341,7 +372,7 @@ describe("runtime conditions the recorded flow never saw", () => {
               primary: { strategy: "role", role: "button", name: "Archive Record", nameMatch: "exact", nth: 0 },
               fallbacks: [],
             },
-            risky: false,
+            effect: "read",
           },
         ],
         successCheckpoint: { description: "unreachable" },
@@ -363,7 +394,7 @@ describe("runtime conditions the recorded flow never saw", () => {
     // claimed to.
     const result = await replay({
       artifact: {
-        schemaVersion: "1.0",
+        schemaVersion: "1.1",
         id: "test-both",
         name: "test-both",
         version: 1,
@@ -387,7 +418,7 @@ describe("runtime conditions the recorded flow never saw", () => {
               fallbacks: [],
             },
             extractTo: "memberName",
-            risky: false,
+            effect: "read",
             checkpoint: {
               description: "on the member page and showing a heading that isn't there",
               urlContains: "/members/10234", // true

@@ -1,6 +1,7 @@
 {
   "allowedOrigins": ["http://localhost:4000"],
-  "allowedRoutePatterns": ["^/$", "^/members(/.*)?$"],
+  "allowedRoutePatterns": ["^/$", "^/members(/.*)?$", "^/login$"],
   "allowedActionTypes": ["navigate", "click", "fill", "select", "check", "press_key", "wait_for", "extract"],
-  "riskyActionNameKeywords": ["confirm", "submit", "delete", "open new sub-account", "open account", "withdraw", "transfer", "close account"]
+  "riskyActionNameKeywords": ["confirm", "submit", "delete", "open new sub-account", "open account", "withdraw", "transfer", "close account"],
+  "gateStateChanging": false
 }

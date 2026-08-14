@@ -23,6 +23,11 @@ export type RawElementInfo = {
    * keyed on the stable label instead of the value, which changes per
    * record and would otherwise be unusable as its own locator. */
   label?: string;
+  /** Accessible name of the submit control of the form this element belongs
+   * to, if any. Pressing Enter in a field submits its form, so *this* is the
+   * control whose label describes what the action actually does — the field's
+   * own name ("Initial Deposit") says nothing about it. */
+  formSubmitName?: string;
 };
 
 /**
@@ -103,6 +108,19 @@ export function collectInteractiveElements(): RawElementInfo[] {
     return "";
   }
 
+  /** The accessible name of the control that submits this element's form.
+   * `<button>` with no type attribute defaults to submit, which legacy
+   * markup relies on constantly. */
+  function formSubmitName(el: Element): string {
+    const form = el.closest("form");
+    if (!form) return "";
+    const submit = form.querySelector(
+      'button[type="submit"], button:not([type]), input[type="submit"]'
+    );
+    if (!submit) return "";
+    return accessibleName(submit, inferRole(submit));
+  }
+
   function cssPath(el: Element): string {
     const parts: string[] = [];
     let node: Element | null = el;
@@ -165,6 +183,7 @@ export function collectInteractiveElements(): RawElementInfo[] {
       id,
       cssPath: cssPath(el),
       nth,
+      formSubmitName: formSubmitName(el) || undefined,
     });
   });
 

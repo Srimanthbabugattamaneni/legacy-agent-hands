@@ -2,9 +2,25 @@ import type { CapabilityArtifact, ArtifactStep, InputParam, OutputField, Checkpo
 import { CapabilityArtifactSchema } from "../schema/artifact.js";
 import type { DiscoveryStepRecord } from "./types.js";
 import { tokenize, tokenizeUrl } from "../util/template.js";
+import { redactText } from "../safety/redact.js";
 
 function inferType(value: string): "string" | "number" {
   return /^-?\d+(\.\d+)?$/.test(value) ? "number" : "string";
+}
+
+/**
+ * Step descriptions are written for a human reviewing a *committed* file, so
+ * they must not carry the record the capability happened to be recorded
+ * against. An extract description ended `-> "Sam Whitfield (20001)"`, putting
+ * a member's name into the artifact — the round-3 checkpoint PII filter never
+ * covered this path because descriptions were passed through untouched.
+ *
+ * The observed value stays in the (redacted) run log, which is where
+ * debugging detail belongs; the artifact keeps only what the step *does*.
+ */
+function sanitizeDescription(description: string, paramLiterals: Record<string, string>): string {
+  const withoutObservedValue = description.replace(/\s*->\s*.*$/, "");
+  return redactText(tokenize(withoutObservedValue, paramLiterals));
 }
 
 function toValueRef(literal: string, paramLiterals: Record<string, string>, sensitive: boolean): ValueRef {
@@ -120,13 +136,27 @@ export function compileArtifact(opts: {
       description: opts.outputDescriptions?.[name] ?? `Extracted value: ${name}`,
     }));
 
-  const steps: ArtifactStep[] = opts.steps.map((s) => {
+  // Consecutive identical extracts are model repetition compiled verbatim —
+  // the shipped open-subaccount recording had the same one three times over.
+  // They are harmless at replay (the later ones overwrite the same output key)
+  // but they make an artifact meant to be *reviewed* harder to read.
+  const deduped = opts.steps.filter((s, i) => {
+    if (i === 0 || s.action !== "extract") return true;
+    const prev = opts.steps[i - 1]!;
+    return !(
+      prev.action === "extract" &&
+      prev.extractTo === s.extractTo &&
+      JSON.stringify(prev.locator) === JSON.stringify(s.locator)
+    );
+  });
+
+  const steps: ArtifactStep[] = deduped.map((s) => {
     const step: ArtifactStep = {
       id: s.id,
       action: s.action,
-      description: s.description,
+      description: sanitizeDescription(s.description, opts.paramLiterals),
       locator: s.locator,
-      risky: s.risky,
+      effect: s.effect,
     };
     if (s.literalValue !== undefined) {
       if (s.action === "navigate") {
@@ -154,7 +184,7 @@ export function compileArtifact(opts: {
   };
 
   const artifact: CapabilityArtifact = {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     id: opts.id,
     name: opts.name,
     version: opts.version ?? 1,

@@ -1,0 +1,12 @@
+{"ts":"2026-08-14T16:47:21.084Z","event":"replay_started","artifactId":"open-subaccount_fdd01c38","version":1,"params":{"memberId":"10234","deposit":"400"}}
+{"ts":"2026-08-14T16:47:21.240Z","event":"step_started","stepId":"step_692c9d33","action":"extract","description":"extract \"accountType\" from combobox \"Account Type\""}
+{"ts":"2026-08-14T16:47:21.274Z","event":"step_succeeded","stepId":"step_692c9d33"}
+{"ts":"2026-08-14T16:47:21.274Z","event":"step_started","stepId":"step_b0f75e77","action":"select","description":"select \"Savings\" in combobox \"Account Type\""}
+{"ts":"2026-08-14T16:47:21.280Z","event":"step_succeeded","stepId":"step_b0f75e77"}
+{"ts":"2026-08-14T16:47:21.280Z","event":"step_started","stepId":"step_00bdeb45","action":"fill","description":"fill textbox \"Initial Deposit\" with \"{{deposit}}\""}
+{"ts":"2026-08-14T16:47:21.290Z","event":"step_succeeded","stepId":"step_00bdeb45"}
+{"ts":"2026-08-14T16:47:21.290Z","event":"step_started","stepId":"step_c0fa81d9","action":"click","description":"click button \"Continue\""}
+{"ts":"2026-08-14T16:47:21.325Z","event":"step_succeeded","stepId":"step_c0fa81d9"}
+{"ts":"2026-08-14T16:47:21.326Z","event":"step_started","stepId":"step_1c778a17","action":"click","description":"click button \"Confirm & Open Account\""}
+{"ts":"2026-08-14T16:47:21.366Z","event":"step_succeeded","stepId":"step_1c778a17"}
+{"ts":"2026-08-14T16:47:21.391Z","event":"replay_finished","result":{"artifactId":"open-subaccount_fdd01c38","artifactVersion":1,"startedAt":"2026-08-14T16:47:21.084Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786726041083","status":"success","outputs":{"accountType":"Savings"},"finishedAt":"2026-08-14T16:47:21.391Z"}}

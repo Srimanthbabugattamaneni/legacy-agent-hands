@@ -43,9 +43,14 @@ export const ArtifactStepSchema = z.object({
   /** Only for action: "navigate" — literal or param-templated URL. */
   url: ValueRefSchema.optional(),
   checkpoint: CheckpointSchema.optional(),
-  /** Irreversible / consequential steps (e.g. final submit). Blocked on
-   * replay unless the caller explicitly authorizes risky execution. */
-  risky: z.boolean().default(false),
+  /**
+   * What this step does to the target: reads it, changes state reversibly,
+   * or commits something irreversible (a final submit). The artifact records
+   * the *effect*; whether an effect requires authorization is a replay-time
+   * policy decision (`checkStepAuthorization`), so the same recording can be
+   * run under a strict or a permissive institution without re-recording.
+   */
+  effect: z.enum(["read", "state_changing", "irreversible"]).default("read"),
 });
 export type ArtifactStep = z.infer<typeof ArtifactStepSchema>;
 
@@ -68,7 +73,10 @@ export const OutputFieldSchema = z.object({
 export type OutputField = z.infer<typeof OutputFieldSchema>;
 
 export const CapabilityArtifactSchema = z.object({
-  schemaVersion: z.literal("1.0"),
+  // 1.1 replaced the boolean `risky` on each step with a three-valued
+  // `effect`, so that "changes state" and "cannot be undone" stop being the
+  // same claim. Artifacts written before that must be re-recorded.
+  schemaVersion: z.literal("1.1"),
   id: z.string(),
   name: z.string(),
   version: z.number().int().min(1),

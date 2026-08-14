@@ -1,5 +1,6 @@
 import type { ActionType } from "../schema/artifact.js";
 import type { LocatorDescriptor } from "../schema/locator.js";
+import type { StepEffect } from "../safety/policy.js";
 
 /** What the discovery loop records for one executed step — the raw material
  * compileArtifact.ts turns into an ArtifactStep. Kept separate from the
@@ -19,5 +20,6 @@ export type DiscoveryStepRecord = {
   urlAfter: string;
   pageTextBefore: string;
   pageTextAfter: string;
-  risky: boolean;
+  /** What this step did to the target — see classifyEffect in src/safety/policy.ts. */
+  effect: StepEffect;
 };

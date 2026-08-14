@@ -7,7 +7,7 @@ import type { CapabilityArtifact } from "../src/schema/artifact.js";
 
 function artifact(overrides: Partial<CapabilityArtifact> = {}): CapabilityArtifact {
   return {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     id: "cap_abc",
     name: "lookup-balance",
     version: 1,
@@ -23,7 +23,7 @@ function artifact(overrides: Partial<CapabilityArtifact> = {}): CapabilityArtifa
         action: "click",
         description: "click Search",
         locator: { primary: { strategy: "role", role: "button", name: "Search", nameMatch: "exact", nth: 0 }, fallbacks: [] },
-        risky: false,
+        effect: "read",
       },
     ],
     successCheckpoint: { description: "done", textContains: "Sub-Accounts" },
@@ -51,7 +51,7 @@ describe("structuralFingerprint", () => {
   });
 
   it("notices a behavioural change", () => {
-    const changed = artifact({ steps: [{ ...artifact().steps[0]!, risky: true }] });
+    const changed = artifact({ steps: [{ ...artifact().steps[0]!, effect: "irreversible" }] });
     expect(structuralFingerprint(artifact())).not.toBe(structuralFingerprint(changed));
   });
 });
@@ -76,7 +76,7 @@ describe("resolveVersion", () => {
     // overwritten in place, so "versioned and reviewable" described the
     // schema rather than anything the system actually did.
     writeFileSync(path.join(dir, "lookup-balance.json"), JSON.stringify(artifact(), null, 2));
-    const changed = artifact({ steps: [{ ...artifact().steps[0]!, risky: true }] });
+    const changed = artifact({ steps: [{ ...artifact().steps[0]!, effect: "irreversible" }] });
 
     const decision = resolveVersion(changed, dir);
     expect(decision.disposition).toBe("bumped");
@@ -85,7 +85,7 @@ describe("resolveVersion", () => {
 
     const archived = JSON.parse(readFileSync(decision.archivedPath!, "utf-8")) as CapabilityArtifact;
     expect(archived.version).toBe(1);
-    expect(archived.steps[0]!.risky).toBe(false);
+    expect(archived.steps[0]!.effect).toBe("read");
   });
 
   it("keeps bumping across successive changes", () => {

@@ -1,0 +1,12 @@
+{"ts":"2026-08-14T16:47:48.348Z","event":"replay_started","artifactId":"open-subaccount_fdd01c38","version":1,"params":{"memberId":"10234","deposit":"100"}}
+{"ts":"2026-08-14T16:47:48.771Z","event":"step_started","stepId":"step_692c9d33","action":"extract","description":"extract \"accountType\" from combobox \"Account Type\""}
+{"ts":"2026-08-14T16:47:48.824Z","event":"step_succeeded","stepId":"step_692c9d33"}
+{"ts":"2026-08-14T16:47:48.824Z","event":"step_started","stepId":"step_b0f75e77","action":"select","description":"select \"Savings\" in combobox \"Account Type\""}
+{"ts":"2026-08-14T16:47:48.830Z","event":"step_succeeded","stepId":"step_b0f75e77"}
+{"ts":"2026-08-14T16:47:48.830Z","event":"step_started","stepId":"step_00bdeb45","action":"fill","description":"fill textbox \"Initial Deposit\" with \"{{deposit}}\""}
+{"ts":"2026-08-14T16:47:48.845Z","event":"step_succeeded","stepId":"step_00bdeb45"}
+{"ts":"2026-08-14T16:47:48.849Z","event":"step_started","stepId":"step_c0fa81d9","action":"click","description":"click button \"Continue\""}
+{"ts":"2026-08-14T16:47:48.889Z","event":"step_succeeded","stepId":"step_c0fa81d9"}
+{"ts":"2026-08-14T16:47:48.889Z","event":"step_started","stepId":"step_1c778a17","action":"click","description":"click button \"Confirm & Open Account\""}
+{"ts":"2026-08-14T16:47:48.918Z","event":"escalation_raised","escalationId":"esc_43edaa00","detail":"irreversible step requires explicit allowRisky authorization"}
+{"ts":"2026-08-14T16:48:05.449Z","event":"replay_finished","result":{"artifactId":"open-subaccount_fdd01c38","artifactVersion":1,"startedAt":"2026-08-14T16:47:48.348Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786726068347","status":"escalated","escalationId":"esc_43edaa00","stepId":"step_1c778a17","reason":"irreversible step requires explicit allowRisky authorization","resolution":"Reviewed the review-and-confirm screen against the originating request: member 10234 (Jordan Alvarez), Savings, $100 initial deposit — matches the ticket, so this authorization is expected and safe. Approved by an ops reviewer via the operator console.","finishedAt":"2026-08-14T16:48:05.449Z"}}

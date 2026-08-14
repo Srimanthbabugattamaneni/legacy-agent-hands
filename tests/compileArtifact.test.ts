@@ -9,7 +9,7 @@ function record(partial: Partial<DiscoveryStepRecord> & Pick<DiscoveryStepRecord
     urlAfter: "http://localhost:4000/",
     pageTextBefore: "",
     pageTextAfter: "",
-    risky: false,
+    effect: "read",
     ...partial,
   };
 }
@@ -233,6 +233,61 @@ describe("compileArtifact", () => {
     const cp = artifact.steps[0]!.checkpoint;
     expect(cp?.textContains).not.toContain("Bob Lee");
     expect(cp?.textContains).toBe("Account Overview Details");
+  });
+
+  it("strips the observed value from a step description so no record data reaches the artifact", () => {
+    // Regression: descriptions were passed through verbatim, so a committed
+    // artifact carried `-> "Sam Whitfield (20001)"` — a member's name in a
+    // reviewable file. The round-3 checkpoint PII filter never covered this
+    // path. The value survives in the (redacted) run log for debugging.
+    const artifact = compileArtifact({
+      id: "cap_10",
+      name: "lookup",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({
+          id: "s1",
+          action: "extract",
+          description: 'extract "member" from cell "Member" -> "Sam Whitfield (20001)"',
+          extractTo: "member",
+        }),
+      ],
+      paramLiterals: { memberId: "20001" },
+      outputsDeclared: { member: "Sam Whitfield (20001)" },
+    });
+    const description = artifact.steps[0]!.description;
+    expect(description).toBe('extract "member" from cell "Member"');
+    expect(description).not.toContain("Sam Whitfield");
+  });
+
+  it("collapses consecutive identical extract steps", () => {
+    // The shipped recording repeated the same extract three times — model
+    // repetition compiled verbatim. Harmless at replay, but noise in an
+    // artifact whose whole point is being reviewable.
+    const locator = {
+      primary: { strategy: "css" as const, selector: "xpath=//td[b]/following-sibling::td[1]", nth: 0 },
+      fallbacks: [],
+    };
+    const artifact = compileArtifact({
+      id: "cap_11",
+      name: "open-subaccount",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({ id: "s1", action: "extract", extractTo: "acct", locator }),
+        record({ id: "s2", action: "extract", extractTo: "acct", locator }),
+        record({ id: "s3", action: "extract", extractTo: "acct", locator }),
+        record({ id: "s4", action: "extract", extractTo: "other", locator }),
+      ],
+      paramLiterals: {},
+      outputsDeclared: { acct: "SA-1", other: "x" },
+    });
+    expect(artifact.steps.map((s) => s.extractTo)).toEqual(["acct", "other"]);
   });
 
   it("drops a declared output with no backing extract step, keeps one that has one", () => {

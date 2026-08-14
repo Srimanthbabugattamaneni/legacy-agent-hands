@@ -20,6 +20,10 @@ export const ObservedElementSchema = z.object({
   checked: z.boolean().optional(),
   disabled: z.boolean().optional(),
   sensitive: z.boolean().default(false),
+  /** Accessible name of this element's form submit control, when it has one.
+   * Not shown to the model — it exists so risk classification can reason
+   * about what activating this element would actually submit. */
+  formSubmitName: z.string().optional(),
 });
 export type ObservedElement = z.infer<typeof ObservedElementSchema>;
 

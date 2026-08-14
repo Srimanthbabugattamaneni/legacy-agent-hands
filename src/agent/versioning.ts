@@ -23,7 +23,7 @@ export function structuralFingerprint(artifact: CapabilityArtifact): string {
       url: s.url,
       extractTo: s.extractTo,
       checkpoint: s.checkpoint,
-      risky: s.risky,
+      effect: s.effect,
     })),
   });
 }

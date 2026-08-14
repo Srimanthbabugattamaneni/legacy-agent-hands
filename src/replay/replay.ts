@@ -2,7 +2,7 @@ import path from "node:path";
 import type { CapabilityArtifact, ArtifactStep } from "../schema/artifact.js";
 import type { ReplayResult, ErrorClass } from "../schema/result.js";
 import { BrowserSurface } from "../surface/browserSurface.js";
-import { checkActionType, checkNavigation, checkRiskyStep } from "../safety/policy.js";
+import { checkActionType, checkNavigation, checkStepAuthorization } from "../safety/policy.js";
 import { loadBusinessOutcomes, matchBusinessOutcome } from "./businessOutcomes.js";
 import { render } from "../util/template.js";
 import { RunLogger } from "../util/logger.js";
@@ -83,7 +83,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
     for (const step of artifact.steps) {
       logger.log("step_started", { stepId: step.id, action: step.action, description: step.description });
 
-      const riskyCheck = checkRiskyStep(step.risky, opts.allowRisky ?? false);
+      const riskyCheck = checkStepAuthorization(step.effect, { allowRisky: opts.allowRisky ?? false });
       if (!riskyCheck.allowed) {
         if (opts.escalateOnRisky) {
           const resolution = await raiseEscalation({
@@ -111,7 +111,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
           status: "failure",
           errorClass: "policy_blocked",
           stepId: step.id,
-          expected: "risky step authorized via allowRisky",
+          expected: `step authorized for effect "${step.effect}"`,
           observed: "not authorized",
           finishedAt: new Date().toISOString(),
         });
@@ -170,8 +170,15 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
       }
 
       if (outcome.status === "hard_failure") {
+        // A guardrail refusal is never a business result, so it must not be
+        // reclassified as one. This matters for the *thrown* path (a navigate
+        // step's pre-check raises rather than latching a violation): the page
+        // is still whatever it was, so a session-expired or access-denied
+        // page underneath would otherwise swallow the breach — the same
+        // masking already guarded against for latched violations above.
+        const maskable = outcome.errorClass !== "policy_blocked" && outcome.errorClass !== "unexpected_dialog";
         const pageText = (await surface.observe()).pageText;
-        const bo = matchBusinessOutcome(pageText, outcomeRules);
+        const bo = maskable ? matchBusinessOutcome(pageText, outcomeRules) : undefined;
         if (bo) {
           logger.log("business_outcome", { outcome: bo.outcome, stepId: step.id });
           return finish({ ...base, status: "business_outcome", outcome: bo.outcome, detail: bo.detail, stepId: step.id, finishedAt: new Date().toISOString() });
@@ -303,7 +310,11 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
     // select) inherit an earlier 5xx and trigger the reload below in the
     // middle of a form, discarding everything already typed.
     const status = surface.takeNavigation()?.status;
-    if (status && status >= 500 && !step.risky) {
+    // Only a `read` step is safe to recover by reloading: reloading a page
+    // that a POST produced re-submits that POST, which is exactly the
+    // double-application hazard the retry is supposed to avoid. This used to
+    // key on `risky`, which let merely state-changing steps be reloaded.
+    if (status && status >= 500 && step.effect === "read") {
       logger.log("transient_retry", { stepId: step.id, status });
       await new Promise((r) => setTimeout(r, 500));
       // Retry by reloading the page the action already landed on, not by
@@ -320,8 +331,12 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
       if (retryStatus && retryStatus >= 500) {
         return { status: "hard_failure", errorClass: "transient_load_failure", error: `HTTP ${retryStatus} persisted after retry` };
       }
-    } else if (status && status >= 500 && step.risky) {
-      return { status: "hard_failure", errorClass: "transient_load_failure", error: `HTTP ${status} on a risky step (not auto-retried)` };
+    } else if (status && status >= 500) {
+      return {
+        status: "hard_failure",
+        errorClass: "transient_load_failure",
+        error: `HTTP ${status} on a ${step.effect} step (not auto-retried)`,
+      };
     }
 
     return { status: "ok" };

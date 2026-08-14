@@ -109,12 +109,17 @@ npm run replay -- --capability lookup-balance --params '{"memberId":"99999"}'   
 npm run replay -- --capability lookup-balance --params '{"memberId":"77777"}'   # recovers from a one-time transient 503
 ```
 
-The `open-subaccount` capability's final "Confirm & Open Account" step is recorded as **risky**
-(consequential/irreversible) and is blocked by default:
+Each step of `open-subaccount` records what it **does** — `read`, `state_changing`, or
+`irreversible`. Only `irreversible` is gated by default, so "Continue → review screen" (a POST that
+commits nothing) replays freely while "Confirm & Open Account" does not. Gating every state change
+would mean passing `--allow-risky` on nearly every step of a legacy flow, which turns the gate into
+a rubber stamp; an institution that wants the stricter posture sets `gateStateChanging` in
+[src/safety/allowlist.json](src/safety/allowlist.json). See REPORT.md §6.
 
 ```bash
 npm run replay -- --capability open-subaccount --params '{"memberId":"20001","deposit":"100"}'
-# -> status: "failure", errorClass: "policy_blocked" (final step blocked, not executed)
+# -> status: "failure", errorClass: "policy_blocked"
+#    (reaches the review screen, then stops at the irreversible confirm — which is not executed)
 
 npm run replay -- --capability open-subaccount --params '{"memberId":"20001","deposit":"100"}' --allow-risky
 # -> status: "success" (explicitly authorized)

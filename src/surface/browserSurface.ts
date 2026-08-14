@@ -9,6 +9,8 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const SAFE_HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 /** tsx/esbuild's dev transform injects `__name(fn, "fn")` calls after named
  * function declarations (to preserve `.name` through bundling) — those
  * reference a helper that only exists in the Node-side module scope, so a
@@ -34,9 +36,18 @@ export class BrowserSurface implements Surface {
   ) {
     page.on("response", (res) => {
       const request = res.request();
-      if (request.resourceType() === "document") {
-        this.navigation = { status: res.status(), method: request.method() };
-      }
+      if (request.resourceType() !== "document") return;
+      const method = request.method();
+      // Status tracks the *final* document (that's the page we ended on), but
+      // the method latches the most consequential one seen since the last
+      // drain. Overwriting it broke post/redirect/get: in POST -> 302 -> GET
+      // the GET arrives last, so the state-changing POST went unreported —
+      // and PRG is the dominant pattern in real apps, so this was precisely
+      // the case the method signal exists to catch.
+      const latched = this.navigation && !SAFE_HTTP_METHODS.has(this.navigation.method)
+        ? this.navigation.method
+        : method;
+      this.navigation = { status: res.status(), method: latched };
     });
     // Legacy apps sometimes throw native dialogs the artifact didn't
     // anticipate. Still auto-dismissed so a run can never hard-hang on one,
@@ -130,6 +141,7 @@ export class BrowserSurface implements Surface {
         checked: r.checked,
         disabled: r.disabled,
         sensitive: r.sensitive,
+        formSubmitName: r.formSubmitName,
       })),
     };
   }
@@ -275,13 +287,40 @@ export class BrowserSurface implements Surface {
 
   async extractText(locator: LocatorDescriptor): Promise<string> {
     const loc = await this.resolveLocator(locator);
-    try {
-      const text = (await loc.innerText({ timeout: 5000 })).trim();
-      if (text) return text;
-    } catch {
-      // fall through to value-based extraction
-    }
-    return (await loc.inputValue({ timeout: 5000 })).trim();
+    // Resolved by element kind rather than innerText-then-fallback: a
+    // <select>'s innerText is the text of *every* option, so extracting from
+    // a dropdown returned the whole list instead of the chosen value.
+    // observe() already reads selects correctly; this brings extraction in
+    // line with it.
+    const text = await loc.evaluate((el: Element) => {
+      const tag = el.tagName.toUpperCase();
+      if (tag === "SELECT") {
+        const select = el as HTMLSelectElement;
+        return select.options[select.selectedIndex]?.text ?? "";
+      }
+      if (tag === "INPUT" || tag === "TEXTAREA") {
+        return (el as HTMLInputElement).value ?? "";
+      }
+      return (el as HTMLElement).innerText ?? el.textContent ?? "";
+    }, undefined, { timeout: 5000 });
+    return text.trim();
+  }
+
+  /** Submit-control name for the form containing the currently focused
+   * element — the only way to identify what a `press_key` with no element
+   * reference would actually submit. */
+  async activeFormSubmitName(): Promise<string | undefined> {
+    const name = await this.page.evaluate(() => {
+      const active = document.activeElement;
+      const form = active?.closest("form");
+      if (!form) return "";
+      const submit = form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
+      if (!submit) return "";
+      const value = (submit as HTMLInputElement).value;
+      if (submit.tagName.toUpperCase() === "INPUT" && value) return value.trim();
+      return (submit.textContent || "").trim().replace(/\s+/g, " ");
+    });
+    return name || undefined;
   }
 
   currentUrl(): string {

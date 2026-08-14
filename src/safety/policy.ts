@@ -11,6 +11,9 @@ const PolicyConfigSchema = z.object({
   allowedRoutePatterns: z.array(z.string()),
   allowedActionTypes: z.array(z.string()),
   riskyActionNameKeywords: z.array(z.string()),
+  /** Require explicit authorization for merely state-changing steps too, not
+   * just irreversible ones. Off by default — see checkStepAuthorization. */
+  gateStateChanging: z.boolean().default(false),
 });
 export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
 
@@ -66,47 +69,88 @@ export function isRiskyByName(name: string, policy: PolicyConfig = loadPolicy())
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
- * Classifies a discovery step as risky from *both* the label of the control
- * and the effect the step actually had.
+ * Classifies what a step *did*, in two tiers.
  *
- * The label alone is not enough, and the gap was exploitable: `risky` used
- * to come only from the activated element's accessible name, but pressing
- * Enter in a form field submits that form while the name inspected is the
- * *input's* ("Initial Deposit"), never the submit control's — and a
- * `press_key` with no element at all inspected nothing. Either way an
- * irreversible submit compiled as `risky: false` and replayed with no
- * authorization, defeating the block-by-default posture entirely.
+ * The original bug was narrower than it first looked, and my first fix
+ * over-corrected. Pressing Enter in a form field submits that form, but the
+ * name being inspected was the *input's* ("Initial Deposit") rather than the
+ * submit control's — so an irreversible submit classified as harmless. The
+ * conclusion I drew ("labels are unreliable, treat every non-GET as risky")
+ * is wrong for this environment: legacy server-rendered apps POST for almost
+ * everything, including reversible intermediate steps like "Continue → review
+ * screen". Gating all of them would push callers to pass `--allow-risky`
+ * habitually, which is the rubber-stamp failure this guardrail exists to
+ * avoid — an always-on gate is the same as no gate.
  *
- * A non-GET document request is a state change no matter which control
- * triggered it, which also covers unlabelled buttons and JS-driven submits.
- * Over-marking is the safe direction here: a false positive costs the caller
- * an explicit `--allow-risky`, a false negative performs an irreversible
- * action unattended.
+ * The real fix is to look at the *right* label: `formSubmitName` names the
+ * control that a submit actually activates. The method then supplies a
+ * second, weaker tier — "this changed state" — which is recorded for review
+ * without necessarily gating.
+ *
+ * Uncertainty still resolves toward safety: a state change we cannot put any
+ * name to at all is treated as irreversible.
  */
-export function classifyRisk(
-  input: { elementName?: string; requestMethod?: string },
+export type StepEffect = "read" | "state_changing" | "irreversible";
+
+export function classifyEffect(
+  input: { elementName?: string; formSubmitName?: string; requestMethod?: string },
   policy: PolicyConfig = loadPolicy()
-): { risky: boolean; reason: string } {
+): { effect: StepEffect; reason: string } {
   if (input.elementName && isRiskyByName(input.elementName, policy)) {
-    return { risky: true, reason: `control name matches a risky keyword: "${input.elementName}"` };
+    return { effect: "irreversible", reason: `control name matches a risky keyword: "${input.elementName}"` };
   }
+  if (input.formSubmitName && isRiskyByName(input.formSubmitName, policy)) {
+    return {
+      effect: "irreversible",
+      reason: `submits a form whose submit control matches a risky keyword: "${input.formSubmitName}"`,
+    };
+  }
+
   const method = input.requestMethod?.toUpperCase();
-  if (method && !SAFE_METHODS.has(method)) {
-    return { risky: true, reason: `step caused a state-changing ${method} request` };
+  const stateChanging = Boolean(method && !SAFE_METHODS.has(method));
+  if (!stateChanging) {
+    return { effect: "read", reason: "no risky keyword and no state-changing request" };
   }
-  return { risky: false, reason: "no risky keyword and no state-changing request" };
+
+  if (!input.elementName && !input.formSubmitName) {
+    return {
+      effect: "irreversible",
+      reason: `${method} request with no identifiable control — treated as irreversible`,
+    };
+  }
+  return { effect: "state_changing", reason: `step caused a ${method} request` };
 }
 
-/** Applied at *replay* time: a step recorded as risky is blocked unless the
- * caller explicitly authorizes risky execution for this invocation. This is
- * the "handle the risky class conservatively" requirement (3.4) — default
- * posture is "block", not "confirm inline", because production replay has
- * no human present to confirm; authorization must come from the caller
- * (the agent/product) ahead of time, e.g. because a human already approved
- * the action in the calling product's own UI. */
-export function checkRiskyStep(risky: boolean, allowRisky: boolean): PolicyDecision {
-  if (risky && !allowRisky) {
-    return { allowed: false, reason: "risky step requires explicit allowRisky authorization" };
+/**
+ * Applied at *replay* time. The artifact records what a step *does* (its
+ * effect); whether that requires authorization is a policy question owned by
+ * the deployment, not a fact baked into the recording — the same separation
+ * that keeps business outcomes at app level rather than per-capability.
+ *
+ * `irreversible` always requires explicit authorization. Default posture is
+ * "block", not "confirm inline", because production replay has no human
+ * present to confirm; authorization comes from the caller ahead of time,
+ * e.g. because a human already approved the action in the calling product's
+ * own UI, or via `--escalate-on-risky` to route it to one.
+ *
+ * `state_changing` is recorded but ungated by default. An institution that
+ * wants every mutation authorized can set `gateStateChanging` in
+ * allowlist.json; the default is off because in server-rendered legacy apps
+ * nearly every step would otherwise be gated.
+ */
+export function checkStepAuthorization(
+  effect: StepEffect,
+  opts: { allowRisky: boolean; policy?: PolicyConfig }
+): PolicyDecision {
+  const policy = opts.policy ?? loadPolicy();
+  if (effect === "irreversible" && !opts.allowRisky) {
+    return { allowed: false, reason: "irreversible step requires explicit allowRisky authorization" };
+  }
+  if (effect === "state_changing" && policy.gateStateChanging && !opts.allowRisky) {
+    return {
+      allowed: false,
+      reason: "state-changing step requires allowRisky because gateStateChanging is enabled",
+    };
   }
   return { allowed: true, reason: "ok" };
 }

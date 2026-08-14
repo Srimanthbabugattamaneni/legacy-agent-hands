@@ -123,7 +123,7 @@ function cmdCatalog(args: string[]) {
       `  inputs:  ${c.inputs.map((i) => `${i.name}:${i.type}${i.required ? "" : "?"}`).join(", ") || "(none)"}`
     );
     console.log(`  outputs: ${c.outputs.map((o) => `${o.name}:${o.type}`).join(", ") || "(none)"}`);
-    console.log(`  steps: ${c.steps.length}${c.steps.some((s) => s.risky) ? " (includes risky step)" : ""}`);
+    console.log(`  steps: ${c.steps.length}${c.steps.some((s) => s.effect === "irreversible") ? " (includes risky step)" : ""}`);
   }
 }
 

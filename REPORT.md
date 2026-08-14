@@ -248,6 +248,16 @@ replay-triggered escalation — reports `status: "escalated"` with the operator'
 (resuming an arbitrary replay step deterministically after manual intervention is not attempted;
 see §7).
 
+One tension the network-level guard creates deserves naming, because it bites the flagship scenario.
+The guard constrains the human too (§6), and the remedy for a session-timeout escalation is the
+app's own "Log In Again" button — which pointed at `/login`, a route the allowlist did not cover. The
+human was locked out of fixing the very thing they were called in for. `/login` is now allowlisted:
+re-login is part of the target app's recovery flow, and excluding it was an oversight rather than a
+security decision. That patches this app; the general answer, not built here, is an **operator-scoped
+relaxation** — while an escalation is pending, widen the allowlist to a set scoped to that operator
+and record every navigation made under it into the escalation record, so the widening is bounded,
+attributable, and auditable rather than a standing hole.
+
 Two processes writing to one file is safe here specifically because they never write concurrently:
 the automation process writes the record once at creation and only reads afterward; the operator
 process writes exactly once, at resolution.
@@ -290,21 +300,37 @@ automation session, not of the agent alone. And only *document* navigations are 
 continue untouched, because legacy vendor apps routinely load assets from another host and blocking
 those would break pages for reasons that have nothing to do with navigation.
 
-Risky/irreversible actions are classified at *discovery* time by `classifyRisk`
-(`src/safety/policy.ts`) from **two** signals: a name-keyword heuristic against the element being
-activated ("confirm", "submit", "delete", "withdraw", ...), **and** whether the step actually caused
-a non-GET document request.
+Steps are classified at *discovery* time by `classifyEffect` (`src/safety/policy.ts`) into
+`read`, `state_changing`, or `irreversible`. This took two attempts, and the wrong turn is worth
+recording because it is a tempting one.
 
-The second signal exists because the first is bypassable, and was. Classification originally read
-only the activated element's accessible name — but pressing Enter in a form field submits that form
-while the only name available is the *input's* ("Initial Deposit"), never the submit control's; and
-`press_key` may carry no element reference at all, in which case nothing was inspected. Either way
-an irreversible submit compiled as `risky: false` and replayed with no authorization, which defeats
-the block-by-default posture below entirely. A state-changing HTTP method is a property of what the
-step *did* rather than what a control was labelled, so it also covers unlabelled buttons and
-JS-driven submits. Over-marking is the safe direction: a false positive costs the caller an explicit
-`--allow-risky`, a false negative performs an irreversible action unattended. At *replay* time the posture is **block by default**: a risky step
-requires the caller to pass `allowRisky: true` explicitly. I chose block-then-require-caller-
+The original classifier read only the activated element's accessible name, which was bypassable:
+pressing Enter in a form field submits that form, but the name in hand is the *input's* ("Initial
+Deposit"), never the submit control's — and `press_key` may carry no element reference at all. An
+irreversible submit therefore compiled as harmless and replayed with no authorization. I concluded
+from that "labels are unreliable" and made every non-GET request risky. **That over-corrected, and
+in exactly this environment.** Legacy server-rendered apps POST for nearly everything, including
+reversible intermediate steps: "Continue → review screen" is a POST that commits nothing. Gating all
+of them means a caller passes `--allow-risky` on almost every step, which is the rubber-stamp
+failure this section argues against two paragraphs down. A gate that is always on is the same as no
+gate.
+
+The real defect was narrower: the *wrong label* was being inspected. `formSubmitName`
+(`src/surface/domSnapshot.ts`) resolves the submit control of the element's enclosing form — and for
+a keypress with no element, `activeFormSubmitName()` resolves it from whatever holds focus — so the
+keyword check finally runs against the control that describes what the step commits. The HTTP method
+then supplies a weaker second tier: "this changed state", recorded for review without necessarily
+gating. Uncertainty still resolves toward safety — a state change with no identifiable control at
+all is treated as irreversible.
+
+The artifact records the **effect**; whether an effect requires authorization is decided at replay
+by `checkStepAuthorization`, because that is a property of the institution rather than of the
+recording. `irreversible` always requires `allowRisky`. `state_changing` does not, unless the
+deployment sets `gateStateChanging` in `allowlist.json` — the same recording then runs under a
+strict or a permissive institution without being re-recorded, which is the separation that already
+keeps business outcomes at app level rather than per-capability.
+
+For an irreversible step the posture is **block by default**. I chose block-then-require-caller-
 authorization over "pause and ask inline" because replay is the *production, no-human-present*
 path (per the spec's own framing) — there's no one to ask inline, and false-inline-confirmation
 would just be a rubber stamp. Authorization has to come from whoever is calling replay (the

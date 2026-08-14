@@ -8,7 +8,8 @@ import type { DiscoveryStepRecord } from "./types.js";
 import type { CapabilityArtifact } from "../schema/artifact.js";
 import type { ActionType } from "../schema/artifact.js";
 import type { Observation } from "../schema/observation.js";
-import { checkActionType, checkNavigation, classifyRisk } from "../safety/policy.js";
+import type { LocatorDescriptor } from "../schema/locator.js";
+import { checkActionType, checkNavigation, classifyEffect } from "../safety/policy.js";
 import { RunLogger } from "../util/logger.js";
 import { newId, slugify } from "../util/ids.js";
 import { createEscalation, waitForResolution } from "../escalation/escalate.js";
@@ -302,84 +303,90 @@ async function executeAction(
   // just to act.
   const urlBefore = beforeObs.url;
 
+  // Latched surface signals must be drained exactly once per action, on
+  // every path. The navigate branch used to return before draining and a
+  // thrown error skipped it entirely, so a dialog raised by one action was
+  // reported against the *next* one.
+  let drained = false;
+  const drainSignals = () => {
+    if (drained) return { dialog: undefined, violation: undefined, navigation: undefined };
+    drained = true;
+    return {
+      navigation: surface.takeNavigation(),
+      dialog: surface.takeDialog(),
+      violation: surface.takePolicyViolation(),
+    };
+  };
+
   try {
+    let locator: LocatorDescriptor | undefined;
+    let literalValue: string | undefined;
+    let extractTo: string | undefined;
+    let description = "";
+    let elementName: string | undefined;
+    let formSubmitName: string | undefined;
+    let sensitive: boolean | undefined;
+
     if (action === "navigate") {
       const input = toolUse.input as { url: string };
       const navCheck = checkNavigation(input.url);
       if (!navCheck.allowed) return { ok: false, error: `policy: ${navCheck.reason}` };
       await surface.navigate(input.url);
-      const afterObs = await surface.observe();
-      return {
-        ok: true,
-        observationAfter: afterObs,
-        record: {
-          id: newId("step"),
-          action,
-          description: `navigate to ${input.url}`,
-          literalValue: input.url,
-          urlBefore,
-          urlAfter: afterObs.url,
-          pageTextBefore: beforeObs.pageText,
-          pageTextAfter: afterObs.pageText,
-          risky: false,
-        },
-      };
+      literalValue = input.url;
+      description = `navigate to ${input.url}`;
+    } else {
+      const input = toolUse.input as { ref?: string; value?: string; key?: string; outputKey?: string };
+      const ref = input.ref;
+      if (!ref && action !== "press_key") return { ok: false, error: "missing ref" };
+      const el = ref ? beforeObs.elements.find((e) => e.ref === ref) : undefined;
+      if (ref && !el) return { ok: false, error: `unknown ref ${ref} (stale observation?)` };
+
+      locator = ref ? surface.resolveElementToLocator(ref) : undefined;
+      elementName = el?.name;
+      sensitive = el?.sensitive;
+      // For a keypress with no element reference, the form that would be
+      // submitted is the one containing whatever currently has focus — the
+      // only way to name what such a step actually does.
+      formSubmitName = el?.formSubmitName ?? (ref ? undefined : await surface.activeFormSubmitName());
+
+      if (action === "click") {
+        await surface.click(locator!);
+        description = `click ${el?.role} "${el?.name}"`;
+      } else if (action === "fill") {
+        literalValue = input.value ?? "";
+        await surface.fill(locator!, literalValue);
+        description = `fill ${el?.role} "${el?.name}" with ${JSON.stringify(paramize(literalValue, params))}`;
+      } else if (action === "select") {
+        literalValue = input.value ?? "";
+        await surface.select(locator!, literalValue);
+        description = `select "${literalValue}" in ${el?.role} "${el?.name}"`;
+      } else if (action === "press_key") {
+        await surface.pressKey(locator, input.key ?? "Enter");
+        description = `press ${input.key}`;
+      } else if (action === "extract") {
+        extractTo = input.outputKey ?? "value";
+        const text = await surface.extractText(locator!);
+        description = `extract "${extractTo}" from ${el?.role} "${el?.name}" -> ${JSON.stringify(text)}`;
+      }
     }
 
-    const input = toolUse.input as { ref?: string; value?: string; key?: string; outputKey?: string };
-    const ref = input.ref;
-    if (!ref && action !== "press_key") return { ok: false, error: "missing ref" };
-    const el = ref ? beforeObs.elements.find((e) => e.ref === ref) : undefined;
-    if (ref && !el) return { ok: false, error: `unknown ref ${ref} (stale observation?)` };
+    const { navigation, dialog, violation } = drainSignals();
 
-    const locator = ref ? surface.resolveElementToLocator(ref) : undefined;
-    let literalValue: string | undefined;
-    let extractTo: string | undefined;
-    let description = "";
-
-    if (action === "click") {
-      await surface.click(locator!);
-      description = `click ${el?.role} "${el?.name}"`;
-    } else if (action === "fill") {
-      literalValue = input.value ?? "";
-      await surface.fill(locator!, literalValue);
-      description = `fill ${el?.role} "${el?.name}" with ${JSON.stringify(paramize(literalValue, params))}`;
-    } else if (action === "select") {
-      literalValue = input.value ?? "";
-      await surface.select(locator!, literalValue);
-      description = `select "${literalValue}" in ${el?.role} "${el?.name}"`;
-    } else if (action === "press_key") {
-      await surface.pressKey(locator, input.key ?? "Enter");
-      description = `press ${input.key}`;
-    } else if (action === "extract") {
-      extractTo = input.outputKey ?? "value";
-      const text = await surface.extractText(locator!);
-      description = `extract "${extractTo}" from ${el?.role} "${el?.name}" -> ${JSON.stringify(text)}`;
-    }
-
-    // Classified from what the step actually did, not only what the control
-    // was called — pressing Enter in a form field submits it while the name
-    // available here is the input's, not the submit button's.
-    const navigation = surface.takeNavigation();
-    const risk = classifyRisk({ elementName: el?.name, requestMethod: navigation?.method });
-    const risky = risk.risky;
-
-    const dialog = surface.takeDialog();
     if (dialog) {
       return {
         ok: false,
         error: `unexpected ${dialog.type} dialog appeared and was dismissed: ${JSON.stringify(dialog.message)}`,
       };
     }
-
     // A click on a link leaving the allowlist is refused at the network
-    // layer and raises nothing, so drain it explicitly. Reported back as a
+    // layer and raises nothing, so surface it explicitly. Reported back as a
     // failed action, which routes it into the existing consecutive-failure
     // path and, if the agent keeps trying, on to a human.
-    const violation = surface.takePolicyViolation();
     if (violation) {
       return { ok: false, error: `policy: blocked navigation to ${violation.url} (${violation.reason})` };
     }
+
+    const { effect } = classifyEffect({ elementName, formSubmitName, requestMethod: navigation?.method });
 
     const afterObs = await surface.observe();
     return {
@@ -391,17 +398,22 @@ async function executeAction(
         description,
         locator,
         literalValue,
-        sensitive: el?.sensitive,
+        sensitive,
         extractTo,
         urlBefore,
         urlAfter: afterObs.url,
         pageTextBefore: beforeObs.pageText,
         pageTextAfter: afterObs.pageText,
-        risky,
+        effect,
       },
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    // No-op when the action already drained; the point is that a failed or
+    // short-circuited action never leaves a signal latched for the next one
+    // to be blamed for.
+    drainSignals();
   }
 }
 

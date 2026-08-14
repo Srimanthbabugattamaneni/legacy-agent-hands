@@ -3,8 +3,8 @@ import {
   checkNavigation,
   checkActionType,
   isRiskyByName,
-  checkRiskyStep,
-  classifyRisk,
+  checkStepAuthorization,
+  classifyEffect,
   loadPolicy,
 } from "../src/safety/policy.js";
 
@@ -42,37 +42,73 @@ describe("safety policy", () => {
     expect(isRiskyByName("Search", policy)).toBe(false);
   });
 
-  it("blocks a risky step unless explicitly authorized", () => {
-    expect(checkRiskyStep(true, false).allowed).toBe(false);
-    expect(checkRiskyStep(true, true).allowed).toBe(true);
-    expect(checkRiskyStep(false, false).allowed).toBe(true);
+});
+
+describe("classifyEffect", () => {
+  const policy = loadPolicy();
+
+  it("marks a risky-sounding control irreversible", () => {
+    expect(classifyEffect({ elementName: "Confirm & Open Account", requestMethod: "GET" }, policy).effect).toBe(
+      "irreversible"
+    );
+  });
+
+  it("marks Enter-in-a-field irreversible via the form's submit control, not the field", () => {
+    // The actual bypass: pressing Enter submits the form, but the name in
+    // hand is the *input's* ("Initial Deposit"). Reading the submit control's
+    // name instead identifies what the step really commits. The first fix for
+    // this treated every POST as irreversible, which was too blunt — see the
+    // next case.
+    const result = classifyEffect(
+      { elementName: "Initial Deposit", formSubmitName: "Confirm & Open Account", requestMethod: "POST" },
+      policy
+    );
+    expect(result.effect).toBe("irreversible");
+    expect(result.reason).toMatch(/submit control/);
+  });
+
+  it("marks a reversible intermediate POST state_changing, not irreversible", () => {
+    // "Continue -> review screen" POSTs but commits nothing. Gating it would
+    // force --allow-risky on nearly every step of a legacy flow, which trains
+    // callers to pass it always — the rubber-stamp failure the gate exists to
+    // prevent.
+    const result = classifyEffect(
+      { elementName: "Continue", formSubmitName: "Continue", requestMethod: "POST" },
+      policy
+    );
+    expect(result.effect).toBe("state_changing");
+  });
+
+  it("falls back to irreversible when state changed but nothing identifies the control", () => {
+    expect(classifyEffect({ requestMethod: "POST" }, policy).effect).toBe("irreversible");
+  });
+
+  it("treats a plain GET on a harmless control as a read", () => {
+    expect(classifyEffect({ elementName: "Search", formSubmitName: "Search", requestMethod: "GET" }, policy).effect).toBe("read");
+    expect(classifyEffect({ elementName: "Search" }, policy).effect).toBe("read");
+    expect(classifyEffect({}, policy).effect).toBe("read");
   });
 });
 
-describe("classifyRisk", () => {
+describe("checkStepAuthorization", () => {
   const policy = loadPolicy();
+  const strict = { ...policy, gateStateChanging: true };
 
-  it("flags a risky-sounding control name", () => {
-    expect(classifyRisk({ elementName: "Confirm & Open Account", requestMethod: "GET" }, policy).risky).toBe(true);
+  it("always gates an irreversible step", () => {
+    expect(checkStepAuthorization("irreversible", { allowRisky: false, policy }).allowed).toBe(false);
+    expect(checkStepAuthorization("irreversible", { allowRisky: true, policy }).allowed).toBe(true);
   });
 
-  it("flags a state-changing request even when the control name looks harmless", () => {
-    // The bypass this closes: pressing Enter in a form field submits the
-    // form, but the only name available is the *input's* ("Initial Deposit"),
-    // never the submit button's — so an irreversible action compiled as
-    // risky: false and replayed with no authorization.
-    const result = classifyRisk({ elementName: "Initial Deposit", requestMethod: "POST" }, policy);
-    expect(result.risky).toBe(true);
-    expect(result.reason).toMatch(/POST/);
+  it("lets a state-changing step through by default", () => {
+    expect(checkStepAuthorization("state_changing", { allowRisky: false, policy }).allowed).toBe(true);
   });
 
-  it("flags a state-changing request with no element at all (press_key without a ref)", () => {
-    expect(classifyRisk({ requestMethod: "POST" }, policy).risky).toBe(true);
+  it("gates a state-changing step when the institution opts in", () => {
+    expect(checkStepAuthorization("state_changing", { allowRisky: false, policy: strict }).allowed).toBe(false);
+    expect(checkStepAuthorization("state_changing", { allowRisky: true, policy: strict }).allowed).toBe(true);
   });
 
-  it("leaves an ordinary GET navigation on a harmless control unflagged", () => {
-    expect(classifyRisk({ elementName: "Search", requestMethod: "GET" }, policy).risky).toBe(false);
-    expect(classifyRisk({ elementName: "Search" }, policy).risky).toBe(false);
-    expect(classifyRisk({}, policy).risky).toBe(false);
+  it("never gates a read", () => {
+    expect(checkStepAuthorization("read", { allowRisky: false, policy: strict }).allowed).toBe(true);
   });
 });

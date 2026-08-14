@@ -54,6 +54,9 @@
               "sensitive": {
                 "type": "boolean",
                 "default": false
+              },
+              "formSubmitName": {
+                "type": "string"
               }
             },
             "required": [

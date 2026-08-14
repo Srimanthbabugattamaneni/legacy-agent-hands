@@ -6,7 +6,7 @@
       "properties": {
         "schemaVersion": {
           "type": "string",
-          "const": "1.0"
+          "const": "1.1"
         },
         "id": {
           "type": "string"
@@ -340,9 +340,14 @@
                 ],
                 "additionalProperties": false
               },
-              "risky": {
-                "type": "boolean",
-                "default": false
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "state_changing",
+                  "irreversible"
+                ],
+                "default": "read"
               }
             },
             "required": [

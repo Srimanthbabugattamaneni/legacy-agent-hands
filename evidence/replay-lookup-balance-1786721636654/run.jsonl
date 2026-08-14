@@ -1,8 +1,0 @@
-{"ts":"2026-08-14T15:33:56.655Z","event":"replay_started","artifactId":"lookup-balance_8aecf7fe","version":1,"params":{"memberId":"88888"}}
-{"ts":"2026-08-14T15:33:56.797Z","event":"step_started","stepId":"step_069a49a8","action":"navigate","description":"navigate to http://localhost:4000/"}
-{"ts":"2026-08-14T15:33:56.813Z","event":"step_succeeded","stepId":"step_069a49a8"}
-{"ts":"2026-08-14T15:33:56.813Z","event":"step_started","stepId":"step_697279f5","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
-{"ts":"2026-08-14T15:33:56.837Z","event":"step_succeeded","stepId":"step_697279f5"}
-{"ts":"2026-08-14T15:33:56.837Z","event":"step_started","stepId":"step_f8d112a1","action":"click","description":"click button \"Search\""}
-{"ts":"2026-08-14T15:33:56.874Z","event":"business_outcome","outcome":"permission_denied","stepId":"step_f8d112a1"}
-{"ts":"2026-08-14T15:33:56.874Z","event":"replay_finished","result":{"artifactId":"lookup-balance_8aecf7fe","artifactVersion":1,"startedAt":"2026-08-14T15:33:56.655Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-1786721636654","status":"business_outcome","outcome":"permission_denied","detail":"The member record requires elevated permissions this session does not have.","stepId":"step_f8d112a1","finishedAt":"2026-08-14T15:33:56.874Z"}}
