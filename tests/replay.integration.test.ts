@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Server } from "node:http";
 import { app } from "../apps/mock-bank/server.js";
 import { replay } from "../src/replay/replay.js";
+import { compileArtifact } from "../src/agent/compileArtifact.js";
 import type { CapabilityArtifact } from "../src/schema/artifact.js";
 
 /**
@@ -128,6 +129,57 @@ function openSubaccountArtifact(): CapabilityArtifact {
     successCheckpoint: { description: "account opened", textContains: "Sub-Account Opened Successfully" },
   };
 }
+
+describe("replay of a compiled artifact honors its declared parameters", () => {
+  // The other tests in this file hand-author their artifacts with {{memberId}}
+  // already templated, which silently assumes compileArtifact produces that
+  // token. It didn't — entryUrl was passed through raw — so a whole class of
+  // "declared parameter is ignored on replay" bugs was invisible here. This
+  // test compiles the artifact the way discovery really does, then replays it
+  // against a *different* member than the one it was recorded on.
+  it("navigates to the member supplied at replay time, not the recorded one", async () => {
+    const artifact = compileArtifact({
+      id: "test-compiled",
+      name: "test-compiled-member-detail",
+      description: "read a member's name from their detail page",
+      goal: "look up a member and read their name",
+      appId: "mock-bank",
+      entryUrl: `${baseUrl}/members/20001`, // recorded against Sam Whitfield
+      steps: [
+        {
+          id: "s1",
+          action: "extract",
+          description: 'extract "memberName" from cell "Name"',
+          locator: {
+            primary: {
+              strategy: "css",
+              selector: 'xpath=//td[b[normalize-space(text())="Name"]]/following-sibling::td[1]',
+              nth: 0,
+            },
+            fallbacks: [],
+          },
+          extractTo: "memberName",
+          urlBefore: `${baseUrl}/members/20001`,
+          urlAfter: `${baseUrl}/members/20001`,
+          pageTextBefore: "",
+          pageTextAfter: "",
+          risky: false,
+        },
+      ],
+      paramLiterals: { memberId: "20001" },
+      outputsDeclared: { memberName: "Sam Whitfield" },
+    });
+
+    expect(artifact.target.entryUrl).toContain("{{memberId}}");
+
+    const result = await replay({ artifact, params: { memberId: "10567" }, headless: true });
+    expect(result.status).toBe("success");
+    if (result.status === "success") {
+      expect(result.outputs.memberName).toBe("Priya Natarajan");
+      expect(result.outputs.memberName).not.toBe("Sam Whitfield");
+    }
+  }, 30000);
+});
 
 describe("replay against the real mock-bank app", () => {
   it("succeeds for a known member and extracts the savings balance", async () => {

@@ -1,0 +1,13 @@
+{
+  "id": "esc_109428c5",
+  "createdAt": "2026-08-14T14:58:01.717Z",
+  "reason": "risky_action_needs_confirmation",
+  "goalOrCapability": "open-subaccount v1",
+  "currentStepDescription": "click button \"Confirm & Open Account\"",
+  "detail": "risky step requires explicit allowRisky authorization",
+  "screenshotPath": "/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786719481482/escalation-1786719481693.png",
+  "status": "resolved",
+  "humanActions": [],
+  "humanNotes": "Reviewed the review-and-confirm screen against the originating request: member 10234 (Jordan Alvarez), Savings, $100 initial deposit — matches the ticket, so the authorization is expected and safe. Approved by an ops reviewer via the operator console. Not driving the live browser action here: deterministic resumption of a replay after manual intervention is intentionally out of scope (REPORT.md Cuts).",
+  "resolvedAt": "2026-08-14T14:58:27.388Z"
+}

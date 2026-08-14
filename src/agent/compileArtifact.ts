@@ -1,7 +1,7 @@
 import type { CapabilityArtifact, ArtifactStep, InputParam, OutputField, Checkpoint, ValueRef } from "../schema/artifact.js";
 import { CapabilityArtifactSchema } from "../schema/artifact.js";
 import type { DiscoveryStepRecord } from "./types.js";
-import { tokenize } from "../util/template.js";
+import { tokenize, tokenizeUrl } from "../util/template.js";
 
 function inferType(value: string): "string" | "number" {
   return /^-?\d+(\.\d+)?$/.test(value) ? "number" : "string";
@@ -101,9 +101,18 @@ export function compileArtifact(opts: {
       risky: s.risky,
     };
     if (s.literalValue !== undefined) {
-      const ref = toValueRef(s.literalValue, opts.paramLiterals, s.sensitive ?? false);
-      if (s.action === "navigate") step.url = ref;
-      else step.value = ref;
+      if (s.action === "navigate") {
+        // A recorded URL is never *equal* to a parameter's value, so plain
+        // exact-match ValueRef resolution would freeze the discovery-time
+        // member/account into every future replay. Tokenize it instead;
+        // replay render()s literals, so embedded {{tokens}} resolve.
+        const exactParam = Object.entries(opts.paramLiterals).find(([, v]) => v === s.literalValue)?.[0];
+        step.url = exactParam
+          ? { kind: "param", name: exactParam }
+          : { kind: "literal", value: tokenizeUrl(s.literalValue, opts.paramLiterals) };
+      } else {
+        step.value = toValueRef(s.literalValue, opts.paramLiterals, s.sensitive ?? false);
+      }
     }
     if (s.extractTo) step.extractTo = s.extractTo;
     const checkpoint = deriveCheckpoint(s, opts.paramLiterals);
@@ -124,7 +133,7 @@ export function compileArtifact(opts: {
     description: opts.description,
     goal: opts.goal,
     createdAt: new Date().toISOString(),
-    target: { appId: opts.appId, entryUrl: opts.entryUrl },
+    target: { appId: opts.appId, entryUrl: tokenizeUrl(opts.entryUrl, opts.paramLiterals) },
     inputs,
     outputs,
     steps,

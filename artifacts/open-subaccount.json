@@ -1,14 +1,14 @@
 {
   "schemaVersion": "1.0",
-  "id": "open-subaccount_dd3e26f9",
+  "id": "open-subaccount_e8e6a9f1",
   "name": "open-subaccount",
   "version": 1,
   "description": "Open a new Savings sub-account for a member with a given initial deposit.",
   "goal": "Set the Account Type dropdown to exactly 'Savings', enter 100 as the Initial Deposit, click Continue to reach the review screen, then click Confirm & Open Account to finish opening the Savings sub-account for this member",
-  "createdAt": "2026-08-14T05:48:21.361Z",
+  "createdAt": "2026-08-14T14:49:13.855Z",
   "target": {
     "appId": "mock-bank",
-    "entryUrl": "http://localhost:4000/members/20001/new-subaccount"
+    "entryUrl": "http://localhost:4000/members/{{memberId}}/new-subaccount"
   },
   "inputs": [
     {
@@ -26,10 +26,61 @@
       "sensitive": false
     }
   ],
-  "outputs": [],
+  "outputs": [
+    {
+      "name": "accountType",
+      "type": "string",
+      "description": "Extracted value: accountType"
+    },
+    {
+      "name": "member",
+      "type": "string",
+      "description": "Extracted value: member"
+    },
+    {
+      "name": "newAccountNumber",
+      "type": "string",
+      "description": "Extracted value: newAccountNumber"
+    }
+  ],
   "steps": [
     {
-      "id": "step_6154315e",
+      "id": "step_8f4c1ccb",
+      "action": "extract",
+      "description": "extract \"accountType\" from combobox \"Account Type\" -> \"Savings\\nChecking\\nCertificate of Deposit\"",
+      "locator": {
+        "primary": {
+          "strategy": "role",
+          "role": "combobox",
+          "name": "Account Type",
+          "nameMatch": "exact",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "#acctType",
+            "nth": 0
+          },
+          {
+            "strategy": "text",
+            "text": "Account Type",
+            "exact": false,
+            "nth": 0
+          },
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > form:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2) > select:nth-of-type(1)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "role+accessible-name is preferred as the most tenant/version-stable strategy; id and text are secondary; a structural CSS path is the last-resort fallback since it breaks the moment layout changes."
+      },
+      "extractTo": "accountType",
+      "risky": false
+    },
+    {
+      "id": "step_3f897bc5",
       "action": "select",
       "description": "select \"Savings\" in combobox \"Account Type\"",
       "locator": {
@@ -67,7 +118,7 @@
       "risky": false
     },
     {
-      "id": "step_5ebc9635",
+      "id": "step_5eb43114",
       "action": "fill",
       "description": "fill textbox \"Initial Deposit\" with \"{{deposit}}\"",
       "locator": {
@@ -105,7 +156,7 @@
       "risky": false
     },
     {
-      "id": "step_86ff51f2",
+      "id": "step_7bbb41ac",
       "action": "click",
       "description": "click button \"Continue\"",
       "locator": {
@@ -138,7 +189,7 @@
       "risky": false
     },
     {
-      "id": "step_cfdaac54",
+      "id": "step_a409bc66",
       "action": "click",
       "description": "click button \"Confirm & Open Account\"",
       "locator": {
@@ -169,6 +220,94 @@
         "textContains": "Sub-Account Opened Successfully"
       },
       "risky": true
+    },
+    {
+      "id": "step_b5162392",
+      "action": "extract",
+      "description": "extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"New Account Number\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "newAccountNumber",
+      "risky": false
+    },
+    {
+      "id": "step_23175440",
+      "action": "extract",
+      "description": "extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"New Account Number\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "newAccountNumber",
+      "risky": false
+    },
+    {
+      "id": "step_f1f33f3d",
+      "action": "extract",
+      "description": "extract \"member\" from cell \"Member\" -> \"Sam Whitfield (20001)\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"Member\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "member",
+      "risky": false
+    },
+    {
+      "id": "step_1935f59f",
+      "action": "extract",
+      "description": "extract \"newAccountNumber\" from cell \"New Account Number\" -> \"SA-20001-2\"",
+      "locator": {
+        "primary": {
+          "strategy": "css",
+          "selector": "xpath=//td[b[normalize-space(text())=\"New Account Number\"]]/following-sibling::td[1]",
+          "nth": 0
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "selector": "body > table:nth-of-type(2) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
+            "nth": 0
+          }
+        ],
+        "reasoning": "value cells are keyed off their stable adjacent label via XPath, not their own (per-record, changing) text; a structural CSS path is the fallback if the label markup itself changes."
+      },
+      "extractTo": "newAccountNumber",
+      "risky": false
     }
   ],
   "successCheckpoint": {

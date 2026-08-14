@@ -82,8 +82,35 @@ the page text before/after and keeps a newly-appeared line as `textContains` (fa
 URL-change check, then to nothing). "The confirmation page showed the words 'Review & Confirm New
 Sub-Account'" is *evidence the action worked*, in the terms of the spec's own definition of a
 checkpoint — not an assumption. Literal values that match a declared param are tokenized to
-`{{memberId}}` inside checkpoints and inside the artifact's `target.entryUrl`, so a capability
-recorded for member 10234 replays correctly for member 55555 (see `src/util/template.ts`).
+`{{memberId}}` inside checkpoints, inside the artifact's `target.entryUrl`, and inside any recorded
+`navigate` step's URL, so a capability recorded for member 10234 replays correctly for member 55555
+(see `src/util/template.ts`).
+
+URLs are tokenized *structurally* (`tokenizeUrl`), not by the same substring replace used for
+checkpoint text: only whole path segments and whole query values are matched, and the origin is
+never rewritten. A URL is positional, so a blind substring replace corrupts it — with
+`deposit="1"`, `/members/20001/new-subaccount` becomes `/members/2000{{deposit}}/new-subaccount`,
+and any parameter whose value happens to be `4000` would eat the port out of
+`http://localhost:4000/`. Whole-segment matching makes that class of false positive impossible: a
+segment either *is* the parameter's value or it isn't.
+
+This was a real bug, and the worst one in the project: `entryUrl` was originally passed through
+compilation raw, so the discovery-time member was frozen into the artifact and **every replay
+silently ignored `memberId`** — `open-subaccount` replayed with `memberId=10567` opened the form
+for member 20001 and would have executed the irreversible "Confirm & Open Account" step against the
+wrong member. A declared parameter not being honored on an irreversible action is exactly the
+failure mode this system exists to prevent, and it produced no error at any layer: the allowlist
+passed (same origin/route), the risky-step gate passed, and the checkpoint passed, because the page
+it landed on was perfectly valid — just for the wrong member. Recorded `navigate` steps had the
+identical defect, since a full URL is never *equal* to a parameter's value and so never matched the
+exact-match `ValueRef` path either.
+
+It survived because every artifact in `tests/replay.integration.test.ts` was hand-authored with
+`{{memberId}}` already written in, which quietly assumed the very behavior that was missing. The
+fix therefore includes `tests/replay.integration.test.ts`'s "replay of a compiled artifact honors
+its declared parameters" case, which runs a real `compileArtifact` output against a *different*
+member than it was recorded on and asserts on that member's data — the shape of test that would
+have caught it. Both regression tests were confirmed to fail against the pre-fix code.
 
 Picking *which* new line matters more than it first looks. The real discovery run initially chose
 the longest new line, which for the mock app's sub-accounts table row
@@ -243,6 +270,12 @@ route/action-type restriction is the backstop for that case, not the risky flag 
 - **Multi-tenant config and drift detection are designed (§4), not built** — no tenant override
   file format, no fallback-rate dashboard, per the brief's explicit steer against building scaling
   infrastructure prematurely.
+- **Checkpoint text is still tokenized by substring replace**, not structurally like URLs (§2). The
+  same partial-match hazard exists in principle — a param value of `"1"` would tokenize *inside*
+  other numbers in a checkpoint string — but the blast radius is far smaller (a checkpoint that
+  fails loudly, versus a URL that silently targets the wrong record), and the digit-ranking
+  heuristic already steers checkpoints toward digit-free text. Next: match on word boundaries, and
+  refuse to tokenize param values below a length threshold.
 - **`role`-based accessible-name computation is a hand-rolled approximation** of the real
   accessibility algorithm (`src/surface/domSnapshot.ts`), not the browser's actual accname
   computation — good enough for this target and close enough to what Playwright's own `getByRole`

@@ -142,6 +142,45 @@ describe("compileArtifact", () => {
     ).toThrow(/sensitive/);
   });
 
+  it("tokenizes the entry URL so a declared param is honored on replay", () => {
+    // Regression: entryUrl was passed through raw, so the discovery-time
+    // member was frozen into the artifact and every replay silently ignored
+    // memberId — navigating to (and, for open-subaccount, opening an account
+    // against) the wrong member.
+    const artifact = compileArtifact({
+      id: "cap_6",
+      name: "open-subaccount",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/members/20001/new-subaccount",
+      steps: [record({ id: "s1", action: "click" })],
+      paramLiterals: { memberId: "20001", deposit: "100" },
+      outputsDeclared: {},
+    });
+    expect(artifact.target.entryUrl).toBe("http://localhost:4000/members/{{memberId}}/new-subaccount");
+  });
+
+  it("tokenizes a recorded navigate step's URL", () => {
+    const artifact = compileArtifact({
+      id: "cap_7",
+      name: "lookup",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({ id: "s1", action: "navigate", literalValue: "http://localhost:4000/members/20001" }),
+      ],
+      paramLiterals: { memberId: "20001" },
+      outputsDeclared: {},
+    });
+    expect(artifact.steps[0]!.url).toEqual({
+      kind: "literal",
+      value: "http://localhost:4000/members/{{memberId}}",
+    });
+  });
+
   it("drops a declared output with no backing extract step, keeps one that has one", () => {
     // Regression: finish_success can claim an output was captured without
     // the agent ever calling extract for it (seen in practice — a weaker
