@@ -118,5 +118,3 @@ export const AGENT_TOOLS: ToolSpec[] = [
     },
   },
 ];
-
-export type ToolName = (typeof AGENT_TOOLS)[number]["name"];

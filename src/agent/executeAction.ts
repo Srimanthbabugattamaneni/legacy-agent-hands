@@ -1,7 +1,7 @@
 import type { ActionType } from "../schema/artifact.js";
 import type { Observation } from "../schema/observation.js";
 import type { LocatorDescriptor } from "../schema/locator.js";
-import type { Surface } from "../surface/types.js";
+import type { SurfaceActions, SurfacePerception, SurfaceSignals } from "../surface/types.js";
 import { checkActionType, checkNavigation, classifyEffect } from "../safety/policy.js";
 import type { DiscoveryStepRecord } from "./types.js";
 import type { ToolCall } from "./llm/types.js";
@@ -22,11 +22,11 @@ export type ActionOutcome = {
  * the conversation, escalation, or stopping rules do.
  */
 export async function executeAction(
-  surface: Surface,
+  surface: SurfacePerception & SurfaceActions & SurfaceSignals,
   toolUse: ToolCall,
   params: Record<string, string>,
   beforeObs: Observation
-): Promise<{ ok: boolean; error?: string; record?: DiscoveryStepRecord; observationAfter?: Observation }> {
+): Promise<ActionOutcome> {
   const actionTypeMap: Record<string, ActionType> = {
     navigate: "navigate",
     click: "click",

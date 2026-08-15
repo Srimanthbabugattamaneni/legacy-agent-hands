@@ -13,7 +13,7 @@ export async function verifyCheckpoint(
   surface: SurfacePerception & SurfaceActions,
   checkpoint: NonNullable<ArtifactStep["checkpoint"]>,
   params: Record<string, string>
-): Promise<{ pass: boolean; expected: string; observed: string }> {
+): Promise<CheckpointResult> {
   // Every condition present is checked and they must all hold. Returning on
   // the first one present meant a checkpoint carrying both urlContains and
   // textContains — which the schema allows — silently verified only the URL,
