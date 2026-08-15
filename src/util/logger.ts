@@ -29,3 +29,12 @@ export class RunLogger {
     return path.join(this.dir, name);
   }
 }
+
+/**
+ * Where run evidence is written. Overridable so a test run does not scatter
+ * directories through the repo it is testing — the suite points this at a
+ * temp dir, while real runs keep writing to ./evidence for the reviewer.
+ */
+export function evidenceRoot(): string {
+  return process.env.EVIDENCE_DIR ?? path.join(process.cwd(), "evidence");
+}

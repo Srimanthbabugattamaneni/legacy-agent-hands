@@ -3,7 +3,7 @@ loadEnvFile();
 
 import { runDiscovery } from "./agent/discover.js";
 import { replay } from "./replay/replay.js";
-import { listCapabilities, getCapability } from "./catalog/catalog.js";
+import { listCapabilities, getCapability, toAgentTools } from "./catalog/catalog.js";
 
 type Flags = Record<string, string | true>;
 
@@ -97,6 +97,15 @@ function cmdCatalog(args: string[]) {
   const { positional } = parseArgs(args);
   const sub = positional[0] ?? "list";
 
+  if (sub === "tools") {
+    // The catalog as a calling agent would consume it: one typed tool
+    // definition per recorded capability, generated from its declared
+    // inputs/outputs. `replay --capability <name> --params <json>` is the
+    // matching invocation path, so an agent discovers here and calls there.
+    console.log(JSON.stringify(toAgentTools(), null, 2));
+    return;
+  }
+
   if (sub === "show") {
     const name = positional[1];
     if (!name) throw new Error("usage: catalog show <name>");
@@ -140,7 +149,12 @@ async function main() {
       cmdCatalog(rest);
       break;
     default:
-      console.error("usage: cli.ts <discover|replay|catalog> [...flags]");
+      console.error(
+        "usage: cli.ts <discover|replay|catalog> [...flags]\n" +
+          "  catalog            list recorded capabilities\n" +
+          "  catalog show <n>   print one capability artifact\n" +
+          "  catalog tools      print the tool definitions an agent would call"
+      );
       process.exitCode = 1;
   }
 }

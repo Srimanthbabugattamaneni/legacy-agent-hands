@@ -1,0 +1,10 @@
+{"ts":"2026-08-15T04:12:23.961Z","event":"replay_started","artifactId":"open-subaccount_83e98a2e","version":1,"params":{"memberId":"10234","deposit":"100"}}
+{"ts":"2026-08-15T04:12:24.405Z","event":"step_started","stepId":"step_c3f8e3a6","action":"select","description":"select \"Savings\" in combobox \"Account Type\""}
+{"ts":"2026-08-15T04:12:24.461Z","event":"step_succeeded","stepId":"step_c3f8e3a6"}
+{"ts":"2026-08-15T04:12:24.461Z","event":"step_started","stepId":"step_bc357854","action":"fill","description":"fill textbox \"Initial Deposit\" with \"{{deposit}}\""}
+{"ts":"2026-08-15T04:12:24.479Z","event":"step_succeeded","stepId":"step_bc357854"}
+{"ts":"2026-08-15T04:12:24.479Z","event":"step_started","stepId":"step_d82c942a","action":"click","description":"click button \"Continue\""}
+{"ts":"2026-08-15T04:12:24.515Z","event":"step_succeeded","stepId":"step_d82c942a"}
+{"ts":"2026-08-15T04:12:24.516Z","event":"step_started","stepId":"step_724e255a","action":"click","description":"click button \"Confirm & Open Account\""}
+{"ts":"2026-08-15T04:12:24.543Z","event":"escalation_raised","escalationId":"esc_b402ee9e","detail":"irreversible step requires explicit allowRisky authorization"}
+{"ts":"2026-08-15T04:12:32.062Z","event":"replay_finished","result":{"artifactId":"open-subaccount_83e98a2e","artifactVersion":1,"startedAt":"2026-08-15T04:12:23.961Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786767143961","status":"escalated","escalationId":"esc_b402ee9e","stepId":"step_724e255a","reason":"irreversible step requires explicit allowRisky authorization","resolution":"Checked the review screen against the request ticket: member 10234, Savings, $100. Matches, so the authorization is expected. Approved by an ops reviewer.","finishedAt":"2026-08-15T04:12:32.062Z"}}

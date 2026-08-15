@@ -2,11 +2,14 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 
 import path from "node:path";
 import { EscalationRequestSchema, type EscalationRequest, type EscalationReason } from "../schema/escalation.js";
 import { newId } from "../util/ids.js";
+import { evidenceRoot } from "../util/logger.js";
 
-const ESCALATION_DIR = path.join(process.cwd(), "evidence", "escalations");
+function escalationDir(): string {
+  return path.join(evidenceRoot(), "escalations");
+}
 
 export function escalationPath(id: string): string {
-  return path.join(ESCALATION_DIR, `${id}.json`);
+  return path.join(escalationDir(), `${id}.json`);
 }
 
 /**
@@ -24,7 +27,7 @@ export function createEscalation(input: {
   detail: string;
   screenshotPath?: string;
 }): EscalationRequest {
-  mkdirSync(ESCALATION_DIR, { recursive: true });
+  mkdirSync(escalationDir(), { recursive: true });
   const req: EscalationRequest = EscalationRequestSchema.parse({
     id: newId("esc"),
     createdAt: new Date().toISOString(),
@@ -41,10 +44,10 @@ export function readEscalation(id: string): EscalationRequest {
 }
 
 export function listEscalations(): EscalationRequest[] {
-  if (!existsSync(ESCALATION_DIR)) return [];
-  return readdirSync(ESCALATION_DIR)
+  if (!existsSync(escalationDir())) return [];
+  return readdirSync(escalationDir())
     .filter((f) => f.endsWith(".json"))
-    .map((f) => EscalationRequestSchema.parse(JSON.parse(readFileSync(path.join(ESCALATION_DIR, f), "utf-8"))))
+    .map((f) => EscalationRequestSchema.parse(JSON.parse(readFileSync(path.join(escalationDir(), f), "utf-8"))))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -65,4 +68,31 @@ export async function waitForResolution(
     await new Promise((r) => setTimeout(r, pollMs));
   }
   return null;
+}
+
+export type SessionSnapshot = { url: string; title: string };
+
+/**
+ * Records what the human actually did with the session, by comparing it
+ * either side of the handoff.
+ *
+ * The operator's free-text notes are their own account of events; this is the
+ * independent one. It is deliberately what the system can *observe* rather
+ * than what it is told: whether the session moved, and where to. A keystroke-
+ * level record would need CDP tracing over the handoff window — a richer
+ * signal, and the natural next step, but a much bigger dependency than the
+ * question "did the session end up somewhere else, and where" warrants.
+ */
+export function recordSessionDelta(id: string, before: SessionSnapshot, after: SessionSnapshot): void {
+  const moved = before.url !== after.url;
+  const description = moved
+    ? `operator navigated the session: ${before.url} -> ${after.url} ("${after.title}")`
+    : `operator left the session on ${after.url} ("${after.title}") — no navigation observed`;
+
+  const req = readEscalation(id);
+  const updated: EscalationRequest = {
+    ...req,
+    humanActions: [...req.humanActions, { at: new Date().toISOString(), description }],
+  };
+  writeFileSync(escalationPath(id), JSON.stringify(updated, null, 2));
 }

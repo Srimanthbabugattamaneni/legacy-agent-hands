@@ -10,9 +10,9 @@ import type { CapabilityArtifact } from "../schema/artifact.js";
 import type { Observation } from "../schema/observation.js";
 import { checkNavigation } from "../safety/policy.js";
 import { executeAction } from "./executeAction.js";
-import { RunLogger } from "../util/logger.js";
+import { RunLogger, evidenceRoot } from "../util/logger.js";
 import { newId, slugify } from "../util/ids.js";
-import { createEscalation, waitForResolution } from "../escalation/escalate.js";
+import { createEscalation, waitForResolution, recordSessionDelta } from "../escalation/escalate.js";
 import { resolveVersion } from "./versioning.js";
 import { createProvider } from "./llm/index.js";
 import type { ChatMessage, ToolCall, LlmProvider } from "./llm/types.js";
@@ -44,6 +44,12 @@ export type DiscoverOptions = {
    * re-record, CI) needs to be able to say no and just get a failed result.
    */
   escalateWhenStuck?: boolean;
+  /**
+   * Wall-clock budget for the whole run. The step budget alone does not bound
+   * elapsed time — a local model on a slow page can spend minutes per step —
+   * and 3.1 lists timeout as a stopping condition in its own right.
+   */
+  timeoutMs?: number;
   createSurface?: (opts: { headless: boolean; guard: NavigationGuard }) => Promise<Surface>;
 };
 
@@ -67,11 +73,12 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
   if (!nav.allowed) throw new Error(`policy blocked starting navigation: ${nav.reason}`);
 
   const runId = `discover-${slugify(opts.name)}-${Date.now()}`;
-  const logger = new RunLogger(path.join(process.cwd(), "evidence"), runId);
+  const logger = new RunLogger(evidenceRoot(), runId);
   logger.log("discovery_started", { goal: opts.goal, targetUrl: opts.targetUrl, params: opts.params, provider: provider.label });
 
   const maxSteps = opts.maxSteps ?? 20;
   const escalateWhenStuck = opts.escalateWhenStuck ?? true;
+  const deadline = Date.now() + (opts.timeoutMs ?? Number(process.env.DISCOVERY_TIMEOUT_MS ?? 10 * 60 * 1000));
   const headless = opts.headless ?? process.env.HEADLESS === "true";
 
   const createSurface = opts.createSurface ?? ((o) => BrowserSurface.create(o));
@@ -88,9 +95,22 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
     logger.log("observation", { url: observation.url, title: observation.title });
 
     for (let step = 0; step < maxSteps; step++) {
+      if (Date.now() > deadline) {
+        logger.log("discovery_aborted", { reason: "timeout", stepsTaken: step });
+        await handleEscalation({
+          enabled: escalateWhenStuck,
+          reason: "discovery_stuck",
+          goalOrCapability: opts.goal,
+          detail: `wall-clock timeout reached after ${step} steps`,
+          surface,
+          logger,
+        });
+        return { status: "aborted", runDir: logger.dir };
+      }
       messages.push({ role: "user", content: formatObservation(observation, step, maxSteps) });
 
-      const toolUse = await nextToolCall(provider, system, messages, logger);
+      const chosen = await nextToolCall(provider, system, messages, logger);
+      const toolUse = chosen?.toolCall;
 
       if (!toolUse) {
         consecutiveFailures++;
@@ -114,7 +134,22 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
         }
         continue;
       }
-      logger.log("agent_action", { tool: toolUse.name, input: toolUse.input });
+      // The rationale is logged alongside the action because evidence has to
+      // answer "why", not just "what" — a reviewer debugging a bad recording
+      // needs the model's stated reason for the step, not only the step.
+      // Redaction still applies: this goes through RunLogger like everything
+      // else, so a model that echoes a member's details cannot leak them here.
+      logger.log("agent_action", {
+        tool: toolUse.name,
+        input: toolUse.input,
+        rationale:
+          // The acting tools carry `reason`; the finishing tools carry their
+          // own summary/reason field, so the log reads uniformly either way.
+          (toolUse.input as { reason?: string; summary?: string }).reason ||
+          (toolUse.input as { summary?: string }).summary ||
+          chosen?.rationale ||
+          "(model gave no stated reason)",
+      });
 
       if (toolUse.name === "finish_success") {
         const input = toolUse.input as { summary: string; outputs?: Record<string, string | number | boolean> };
@@ -153,6 +188,14 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
         if (decision.disposition !== "unchanged") {
           writeFileSync(decision.artifactPath, JSON.stringify(decision.artifact, null, 2));
         }
+        // The compiled capability is also written beside its own run log, so
+        // /evidence holds a self-contained demonstration — artifact plus the
+        // run that produced it — rather than making a reviewer cross-reference
+        // /artifacts, where the file will have moved on after a re-record.
+        writeFileSync(
+          logger.artifactPath("capability.json"),
+          JSON.stringify(decision.artifact, null, 2)
+        );
         await surface.screenshot(logger.artifactPath("final.png"));
         logger.log("artifact_written", {
           artifactPath: decision.artifactPath,
@@ -269,11 +312,13 @@ async function nextToolCall(
   system: string,
   messages: ChatMessage[],
   logger: RunLogger
-): Promise<ToolCall | undefined> {
+): Promise<{ toolCall: ToolCall; rationale: string } | undefined> {
   for (let attempt = 0; attempt < MAX_NUDGE_ATTEMPTS; attempt++) {
     const response = await provider.step(system, messages, AGENT_TOOLS);
     messages.push({ role: "assistant", content: response.assistantText, toolCalls: response.toolCalls });
-    if (response.toolCalls.length > 0) return response.toolCalls[0];
+    if (response.toolCalls.length > 0) {
+      return { toolCall: response.toolCalls[0]!, rationale: response.assistantText };
+    }
     logger.log("no_tool_use", { attempt, assistantText: response.assistantText });
     if (attempt < MAX_NUDGE_ATTEMPTS - 1) {
       messages.push({ role: "user", content: NUDGE_MESSAGE });
@@ -307,7 +352,14 @@ async function handleEscalation(input: {
   console.log(`\n[ESCALATION ${req.id}] ${input.detail}`);
   console.log(`  A live, non-headless browser window is open for this run — you can operate it directly.`);
   console.log(`  Run \`npm run operator\` and open http://localhost:4100/escalations/${req.id} for context, then submit Resume.\n`);
+  const before = { url: input.surface.currentUrl(), title: (await input.surface.observe()).title };
   const resolved = await waitForResolution(req.id);
+  if (resolved) {
+    recordSessionDelta(req.id, before, {
+      url: input.surface.currentUrl(),
+      title: (await input.surface.observe()).title,
+    });
+  }
   if (resolved) input.logger.log("escalation_resolved", { escalationId: req.id, humanNotes: resolved.humanNotes });
   else input.logger.log("escalation_timeout", { escalationId: req.id });
   return resolved;

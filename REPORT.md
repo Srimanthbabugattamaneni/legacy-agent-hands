@@ -96,6 +96,14 @@ leaves the page looking ordinary while the flow has diverged. Surface signals (r
 policy violation) are **read-and-clear**; a sticky "last response status" let a non-navigating step
 inherit an earlier 5xx and reload mid-form, discarding everything typed.
 
+Evidence is a JSONL run log per run plus a screenshot, and records *why* as well as what: every
+acting tool takes a `reason` argument, so each `agent_action` carries the model's stated intent next
+to the call it made. Asking for it as part of the call is the only way to get it — a tool-calling
+model emits no prose alongside a tool call, so a run log built from the response text alone records
+nothing but the mechanics. The compiled capability is written beside its own
+run log, making each `/evidence` directory a self-contained demonstration. Everything on that path
+is redacted (§6).
+
 UI drift is secondary by the brief's framing; the fallback chain is the mitigation, and exhausting
 it reports `element_not_found` rather than proceeding blindly.
 
@@ -138,6 +146,12 @@ to rescue. `/login` is now allowlisted. The general answer, not built, is an **o
 relaxation**: while an escalation is pending, widen the allowlist to a set scoped to that operator
 and record every navigation made under it into the escalation record — bounded, attributable, and
 auditable rather than a standing hole.
+
+Two records of the handoff are kept, deliberately distinct: the operator's free-text notes, which
+are their own account, and `humanActions`, which is what the automation independently *observed* of
+the session across the pause — whether it moved, and where to. A keystroke-level record would need
+CDP tracing over the handoff window; that is the natural next step and a documented cut, not
+something the notes should be mistaken for.
 
 Discovery resumes after intervention; replay does not. An LLM can adapt to whatever state a human
 left behind, a fixed interpreter cannot, so replay reports and stops rather than guessing.
@@ -202,5 +216,8 @@ per-tenant. The risky-keyword list is substring matching, not a classifier.
   per-tenant config above.
 - **One provider ships.** `LlmProvider` is tested against a scripted implementation, but a hosted
   adapter is not included — it would be a new file, not a change to the loop.
-- Stretch goal taken: **agent-facing capability interface** — `src/catalog/catalog.ts` exposes every
-  artifact as a typed, callable tool definition generated from its declared inputs/outputs.
+- Stretch goal taken: **agent-facing capability interface** — `npm run catalog -- tools` emits one
+  typed tool definition per capability, generated from its declared inputs/outputs, and
+  `tests/catalog.integration.test.ts` shows one being invoked the way an agent would: pick the tool,
+  satisfy its declared required args, call it, and get the advertised outputs back — including the
+  business-outcome branch, so a caller can tell "no such member" from "the capability broke".

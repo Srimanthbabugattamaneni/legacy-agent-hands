@@ -71,7 +71,13 @@ app.get("/escalations/:id", (req, res) => {
            <textarea name="humanNotes" required></textarea>
            <p><button type="submit">Signal Resume</button></p>
          </form>`
-      : `<h3>Resolved</h3><p>${e.resolvedAt}</p><p><b>Notes:</b> ${e.humanNotes ?? ""}</p>`;
+      : `<h3>Resolved</h3><p>${e.resolvedAt}</p><p><b>Operator notes:</b> ${e.humanNotes ?? ""}</p>` +
+        `<h3>Recorded activity</h3>` +
+        (e.humanActions.length
+          ? `<ul>${e.humanActions.map((a) => `<li>${a.at} — ${a.description}</li>`).join("")}</ul>`
+          : "<p>(none recorded yet — captured when the run resumes)</p>") +
+        `<p><small>Notes are the operator's own account; recorded activity is what the
+          automation independently observed of the session across the handoff.</small></p>`;
 
   res.send(
     layout(

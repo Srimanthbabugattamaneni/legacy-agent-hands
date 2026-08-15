@@ -1,0 +1,6 @@
+{"ts":"2026-08-15T04:12:05.534Z","event":"replay_started","artifactId":"lookup-balance_38af545d","version":1,"params":{"memberId":"88888"}}
+{"ts":"2026-08-15T04:12:05.674Z","event":"step_started","stepId":"step_e034b777","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
+{"ts":"2026-08-15T04:12:05.707Z","event":"step_succeeded","stepId":"step_e034b777"}
+{"ts":"2026-08-15T04:12:05.707Z","event":"step_started","stepId":"step_6b6626aa","action":"click","description":"click button \"Search\""}
+{"ts":"2026-08-15T04:12:05.741Z","event":"business_outcome","outcome":"permission_denied","stepId":"step_6b6626aa"}
+{"ts":"2026-08-15T04:12:05.741Z","event":"replay_finished","result":{"artifactId":"lookup-balance_38af545d","artifactVersion":1,"startedAt":"2026-08-15T04:12:05.534Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-1786767125534","status":"business_outcome","outcome":"permission_denied","detail":"The member record requires elevated permissions this session does not have.","stepId":"step_6b6626aa","finishedAt":"2026-08-15T04:12:05.741Z"}}

@@ -91,8 +91,15 @@ written to `artifacts/<name>.json`.
 
 ```bash
 npm run catalog                    # list recorded capabilities
-npm run catalog -- show lookup-balance
+npm run catalog -- show lookup-balance   # the full artifact, for review
+npm run catalog -- tools                 # the same catalog as an agent consumes it:
+                                         # one typed tool definition per capability
 ```
+
+`catalog tools` is the discovery half of the agent-facing surface; `replay --capability <name>
+--params <json>` below is the invocation half. `tests/catalog.integration.test.ts` runs that
+sequence end to end — pick a tool, satisfy its declared arguments, call it, get the advertised
+outputs back.
 
 ### c. Replay deterministically (no LLM, this is the production path)
 
@@ -124,7 +131,10 @@ npm run replay -- --capability open-subaccount --params '{"memberId":"10567","de
 ```
 
 Each replay prints a structured JSON `ReplayResult` and writes its own evidence run under
-`evidence/replay-<capability>-<timestamp>/`.
+`evidence/replay-<capability>-<timestamp>/`. A discovery run's directory also contains
+`capability.json` — the artifact that run produced — so each one is a self-contained record. Run
+logs note *why* the agent chose each step, not just what it did. Set `EVIDENCE_DIR` to write
+elsewhere.
 
 The other half of the safety model — the **navigation allowlist** — is enforced at the browser
 context, so it holds however navigation was triggered (a navigate step in a tampered artifact, a

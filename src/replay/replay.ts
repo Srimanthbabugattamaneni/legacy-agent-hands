@@ -8,9 +8,9 @@ import { render } from "../util/template.js";
 import { coerceParams } from "./params.js";
 import { execStep } from "./executor.js";
 import { verifyCheckpoint } from "./checkpoint.js";
-import { RunLogger } from "../util/logger.js";
+import { RunLogger, evidenceRoot } from "../util/logger.js";
 import { slugify } from "../util/ids.js";
-import { createEscalation, waitForResolution } from "../escalation/escalate.js";
+import { createEscalation, waitForResolution, recordSessionDelta } from "../escalation/escalate.js";
 import { ElementNotFoundError, PolicyViolationError } from "../surface/types.js";
 import type {
   NavigationGuard,
@@ -44,7 +44,7 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
   const { artifact } = opts;
   const params = coerceParams(artifact, opts.params);
   const runId = `replay-${slugify(artifact.name)}-${Date.now()}`;
-  const logger = new RunLogger(path.join(process.cwd(), "evidence"), runId);
+  const logger = new RunLogger(evidenceRoot(), runId);
   const startedAt = new Date().toISOString();
   logger.log("replay_started", { artifactId: artifact.id, version: artifact.version, params: opts.params });
 
@@ -287,7 +287,15 @@ export async function replay(opts: ReplayOptions): Promise<ReplayResult> {
     console.log(`\n[ESCALATION ${req.id}] ${input.detail}`);
     console.log(`  A live browser window is open for this replay run — operate it directly if needed.`);
     console.log(`  Run \`npm run operator\` and open http://localhost:4100/escalations/${req.id}\n`);
-    return waitForResolution(req.id);
+    const before = { url: input.surface.currentUrl(), title: (await input.surface.observe()).title };
+    const resolved = await waitForResolution(req.id);
+    if (resolved) {
+      recordSessionDelta(req.id, before, {
+        url: input.surface.currentUrl(),
+        title: (await input.surface.observe()).title,
+      });
+    }
+    return resolved;
   }
 
   async function runStepWithRetry(

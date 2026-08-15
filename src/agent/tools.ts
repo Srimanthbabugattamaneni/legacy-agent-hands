@@ -1,7 +1,11 @@
 import type { ToolSpec } from "./llm/types.js";
 
 /**
- * The agent's action vocabulary. Deliberately structured (act on a `ref`
+ * The agent's action vocabulary. Every acting tool takes a `reason`, because
+ * evidence must answer *why* a step was taken and not only what it was: a
+ * tool-calling model returns no prose alongside a call, so requesting the
+ * rationale as part of the call is the only way to capture it.
+ * Deliberately structured (act on a `ref`
  * from the latest observation) rather than screenshot+coordinates — this is
  * the "bias toward an approach that would still work with no clean DOM"
  * call from spec 3.1: ref-based actions still work when the surface is a
@@ -14,8 +18,11 @@ export const AGENT_TOOLS: ToolSpec[] = [
     description: "Navigate the browser to an absolute URL.",
     input_schema: {
       type: "object",
-      properties: { url: { type: "string" } },
-      required: ["url"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        url: { type: "string" },
+      },
+      required: ["url", "reason"],
     },
   },
   {
@@ -23,8 +30,11 @@ export const AGENT_TOOLS: ToolSpec[] = [
     description: "Click the element with the given ref from the most recent observation.",
     input_schema: {
       type: "object",
-      properties: { ref: { type: "string" } },
-      required: ["ref"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        ref: { type: "string" },
+      },
+      required: ["ref", "reason"],
     },
   },
   {
@@ -32,8 +42,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
     description: "Type a value into the text input/textarea with the given ref, replacing its current content.",
     input_schema: {
       type: "object",
-      properties: { ref: { type: "string" }, value: { type: "string" } },
-      required: ["ref", "value"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        ref: { type: "string" },
+        value: { type: "string" },
+      },
+      required: ["ref", "value", "reason"],
     },
   },
   {
@@ -41,8 +55,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
     description: "Choose an option (by its value or visible text) in the <select> with the given ref.",
     input_schema: {
       type: "object",
-      properties: { ref: { type: "string" }, value: { type: "string" } },
-      required: ["ref", "value"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        ref: { type: "string" },
+        value: { type: "string" },
+      },
+      required: ["ref", "value", "reason"],
     },
   },
   {
@@ -50,8 +68,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
     description: "Press a keyboard key (e.g. 'Enter'), optionally scoped to a specific ref.",
     input_schema: {
       type: "object",
-      properties: { ref: { type: "string" }, key: { type: "string" } },
-      required: ["key"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        ref: { type: "string" },
+        key: { type: "string" },
+      },
+      required: ["key", "reason"],
     },
   },
   {
@@ -60,8 +82,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
       "Read the current text/value of the element with the given ref and record it under outputKey as a named result the capability will return to its caller.",
     input_schema: {
       type: "object",
-      properties: { ref: { type: "string" }, outputKey: { type: "string" } },
-      required: ["ref", "outputKey"],
+      properties: {
+        reason: { type: "string", description: "One short sentence: why this step advances the goal." },
+        ref: { type: "string" },
+        outputKey: { type: "string" },
+      },
+      required: ["ref", "outputKey", "reason"],
     },
   },
   {
