@@ -10,7 +10,7 @@ import type { CapabilityArtifact } from "../schema/artifact.js";
 import type { Observation } from "../schema/observation.js";
 import { checkNavigation } from "../safety/policy.js";
 import { executeAction } from "./executeAction.js";
-import { RunLogger, evidenceRoot } from "../util/logger.js";
+import { RunLogger, evidenceRoot, artifactsRoot } from "../util/logger.js";
 import { newId, slugify } from "../util/ids.js";
 import { createEscalation, waitForResolution, recordSessionDelta } from "../escalation/escalate.js";
 import { resolveVersion } from "./versioning.js";
@@ -182,7 +182,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
           outputDescriptions: opts.outputDescriptions,
         });
 
-        const artifactsDir = path.join(process.cwd(), "artifacts");
+        const artifactsDir = artifactsRoot();
         mkdirSync(artifactsDir, { recursive: true });
         const decision = resolveVersion(artifact, artifactsDir);
         if (decision.disposition !== "unchanged") {

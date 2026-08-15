@@ -10,6 +10,9 @@ export default defineConfig({
       // the real logging path, but a test run shouldn't scatter directories
       // through the repository it is testing.
       EVIDENCE_DIR: mkdtempSync(path.join(tmpdir(), "lah-evidence-")),
+      // Likewise for recorded capabilities: a test that records one must not
+      // publish it into the catalog a reviewer reads.
+      ARTIFACTS_DIR: mkdtempSync(path.join(tmpdir(), "lah-artifacts-")),
     },
     // The integration suites each bind port 4000 for the mock bank, so they
     // must not run concurrently.

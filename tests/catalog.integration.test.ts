@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Server } from "node:http";
+import path from "node:path";
 import { app } from "../apps/mock-bank/server.js";
 import { toAgentTools, getCapability } from "../src/catalog/catalog.js";
 import { replay } from "../src/replay/replay.js";
@@ -14,8 +15,15 @@ import { replay } from "../src/replay/replay.js";
  */
 
 let server: Server;
+let priorArtifactsDir: string | undefined;
 
 beforeAll(async () => {
+  // This suite is specifically about the *shipped* catalog being callable, so
+  // it reads the committed artifacts rather than the temp dir the rest of the
+  // suite records into.
+  priorArtifactsDir = process.env.ARTIFACTS_DIR;
+  process.env.ARTIFACTS_DIR = path.join(process.cwd(), "artifacts");
+
   const port = Number(process.env.MOCK_BANK_PORT ?? 4000);
   server = app.listen(port);
   await new Promise<void>((resolve, reject) => {
@@ -31,6 +39,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (priorArtifactsDir === undefined) delete process.env.ARTIFACTS_DIR;
+  else process.env.ARTIFACTS_DIR = priorArtifactsDir;
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 

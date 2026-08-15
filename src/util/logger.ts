@@ -38,3 +38,13 @@ export class RunLogger {
 export function evidenceRoot(): string {
   return process.env.EVIDENCE_DIR ?? path.join(process.cwd(), "evidence");
 }
+
+/**
+ * Where recorded capabilities live. Configurable for the same reason as the
+ * evidence root: a test run that records a capability must not write it into
+ * the catalog a reviewer reads. Without this, `npm test` quietly published
+ * throwaway capabilities into `artifacts/` and twelve of them reached a commit.
+ */
+export function artifactsRoot(): string {
+  return process.env.ARTIFACTS_DIR ?? path.join(process.cwd(), "artifacts");
+}

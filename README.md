@@ -133,8 +133,9 @@ npm run replay -- --capability open-subaccount --params '{"memberId":"10567","de
 Each replay prints a structured JSON `ReplayResult` and writes its own evidence run under
 `evidence/replay-<capability>-<timestamp>/`. A discovery run's directory also contains
 `capability.json` — the artifact that run produced — so each one is a self-contained record. Run
-logs note *why* the agent chose each step, not just what it did. Set `EVIDENCE_DIR` to write
-elsewhere.
+logs note *why* the agent chose each step, not just what it did. `EVIDENCE_DIR` and
+`ARTIFACTS_DIR` relocate both outputs (the test suite points them at temp dirs so a run never
+writes into the repo).
 
 The other half of the safety model — the **navigation allowlist** — is enforced at the browser
 context, so it holds however navigation was triggered (a navigate step in a tampered artifact, a

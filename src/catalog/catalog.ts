@@ -2,18 +2,20 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import type { ToolSpec } from "../agent/llm/types.js";
 import { CapabilityArtifactSchema, type CapabilityArtifact } from "../schema/artifact.js";
+import { artifactsRoot } from "../util/logger.js";
 
-const ARTIFACTS_DIR = path.join(process.cwd(), "artifacts");
+
 
 /** Every recorded capability, agent-invocable by name — this is the whole
  * point of the record-once/replay-many model: an AI agent should be able to
  * discover "what can I do against this app" without re-reasoning about the
  * UI, by reading this catalog instead. */
 export function listCapabilities(): CapabilityArtifact[] {
-  if (!existsSync(ARTIFACTS_DIR)) return [];
-  return readdirSync(ARTIFACTS_DIR)
+  const dir = artifactsRoot();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
-    .map((f) => CapabilityArtifactSchema.parse(JSON.parse(readFileSync(path.join(ARTIFACTS_DIR, f), "utf-8"))));
+    .map((f) => CapabilityArtifactSchema.parse(JSON.parse(readFileSync(path.join(dir, f), "utf-8"))));
 }
 
 export function getCapability(name: string): CapabilityArtifact | undefined {

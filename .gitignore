@@ -14,3 +14,5 @@ evidence/*-test-*/
 playwright-report/
 test-results/
 scratch-*.ts
+# Capabilities recorded by the test suite, if ARTIFACTS_DIR is ever unset:
+artifacts/test-*.json
