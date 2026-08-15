@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { BrowserSurface } from "../surface/browserSurface.js";
-import type { Surface, SurfacePerception, SurfaceSession } from "../surface/types.js";
+import type { NavigationGuard, Surface, SurfacePerception, SurfaceSession } from "../surface/types.js";
 import { AGENT_TOOLS } from "./tools.js";
 import { buildSystemPrompt, formatObservation } from "./promptBuilder.js";
 import { compileArtifact } from "./compileArtifact.js";
@@ -30,6 +30,21 @@ export type DiscoverOptions = {
   maxSteps?: number;
   provider?: string;
   model?: string;
+  /**
+   * Overrides for the two collaborators discovery owns. Both default to the
+   * real thing; injecting them lets the loop be driven without a model or a
+   * browser, which is how its stopping rules and escalation paths get tested
+   * at all (see tests/agentLoop.test.ts).
+   */
+  llm?: LlmProvider;
+  /**
+   * Whether getting stuck should summon a human. On by default — that is the
+   * point of the escalation path — but it blocks the run until an operator
+   * responds or the timeout elapses, so an unattended caller (a batch
+   * re-record, CI) needs to be able to say no and just get a failed result.
+   */
+  escalateWhenStuck?: boolean;
+  createSurface?: (opts: { headless: boolean; guard: NavigationGuard }) => Promise<Surface>;
 };
 
 export type DiscoverResult = {
@@ -46,7 +61,7 @@ const NUDGE_MESSAGE =
   "You must call exactly one of the provided tools now — choose the single most appropriate one and call it with its required arguments. Do not just describe what you would do.";
 
 export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResult> {
-  const provider = createProvider({ provider: opts.provider, model: opts.model });
+  const provider = opts.llm ?? createProvider({ provider: opts.provider, model: opts.model });
 
   const nav = checkNavigation(opts.targetUrl);
   if (!nav.allowed) throw new Error(`policy blocked starting navigation: ${nav.reason}`);
@@ -56,9 +71,11 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
   logger.log("discovery_started", { goal: opts.goal, targetUrl: opts.targetUrl, params: opts.params, provider: provider.label });
 
   const maxSteps = opts.maxSteps ?? 20;
+  const escalateWhenStuck = opts.escalateWhenStuck ?? true;
   const headless = opts.headless ?? process.env.HEADLESS === "true";
 
-  const surface = await BrowserSurface.create({ headless, guard: (url) => checkNavigation(url) });
+  const createSurface = opts.createSurface ?? ((o) => BrowserSurface.create(o));
+  const surface = await createSurface({ headless, guard: (url) => checkNavigation(url) });
   const system = buildSystemPrompt(opts.goal, opts.targetUrl);
   const messages: ChatMessage[] = [];
   const stepRecords: DiscoveryStepRecord[] = [];
@@ -80,6 +97,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
         logger.log("no_tool_use_after_nudges", { consecutiveFailures });
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           const resolved = await handleEscalation({
+            enabled: escalateWhenStuck,
             reason: "discovery_stuck",
             goalOrCapability: opts.goal,
             detail: `model did not choose a tool after ${MAX_NUDGE_ATTEMPTS} nudges, ${MAX_CONSECUTIVE_FAILURES} times in a row`,
@@ -101,6 +119,18 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
       if (toolUse.name === "finish_success") {
         const input = toolUse.input as { summary: string; outputs?: Record<string, string | number | boolean> };
         logger.log("discovery_success", { summary: input.summary, outputs: input.outputs ?? {} });
+
+        // A model can declare success having done nothing — and then
+        // compilation rejects the empty step list. That is a failed run, not
+        // a crash: callers get a structured result, and the reason lands in
+        // the evidence log rather than as an unhandled schema error.
+        if (stepRecords.length === 0) {
+          logger.log("discovery_aborted", {
+            reason: "finish_success_without_steps",
+            summary: input.summary,
+          });
+          return { status: "aborted", runDir: logger.dir };
+        }
 
         const artifactId = newId(slugify(opts.name));
         const artifact = compileArtifact({
@@ -145,6 +175,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
       if (toolUse.name === "finish_stuck") {
         const input = toolUse.input as { reason: string };
         const resolved = await handleEscalation({
+          enabled: escalateWhenStuck,
           reason: "discovery_stuck",
           goalOrCapability: opts.goal,
           detail: input.reason,
@@ -189,6 +220,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
         logger.log("action_failed", { tool: toolUse.name, error: actionResult.error, consecutiveFailures });
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           const resolved = await handleEscalation({
+            enabled: escalateWhenStuck,
             reason: "discovery_stuck",
             goalOrCapability: opts.goal,
             detail: `${MAX_CONSECUTIVE_FAILURES} consecutive failed actions; last error: ${actionResult.error}`,
@@ -214,6 +246,7 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
     // Step budget is exhausted either way; still raise the escalation so a
     // human gets visibility and can capture context/notes for a retry.
     await handleEscalation({
+      enabled: escalateWhenStuck,
       reason: "discovery_stuck",
       goalOrCapability: opts.goal,
       detail: "max steps reached without a finish_success/finish_stuck call",
@@ -226,11 +259,11 @@ export async function runDiscovery(opts: DiscoverOptions): Promise<DiscoverResul
   }
 }
 
-/** Anthropic's tool_choice:"any" forces a tool call every turn; open models
- * served via Ollama have no equivalent hard guarantee and sometimes reply
- * with plain text instead. Nudge and retry a bounded number of times before
- * treating the turn as a failed action (folded into the same
- * consecutive-failure escalation path as a failed click/fill). */
+/** Some tool-calling APIs can force a tool call every turn; a local model
+ * served through Ollama offers no such guarantee and sometimes replies with
+ * prose instead. Nudge and retry a bounded number of times before treating
+ * the turn as a failed action (folded into the same consecutive-failure
+ * escalation path as a failed click or fill). */
 async function nextToolCall(
   provider: LlmProvider,
   system: string,
@@ -250,12 +283,17 @@ async function nextToolCall(
 }
 
 async function handleEscalation(input: {
+  enabled: boolean;
   reason: "discovery_stuck";
   goalOrCapability: string;
   detail: string;
   surface: SurfaceSession & SurfacePerception;
   logger: RunLogger;
 }) {
+  if (!input.enabled) {
+    input.logger.log("escalation_skipped", { detail: input.detail });
+    return undefined;
+  }
   const screenshotPath = input.logger.artifactPath(`escalation-${Date.now()}.png`);
   await input.surface.screenshot(screenshotPath).catch(() => {});
   const req = createEscalation({

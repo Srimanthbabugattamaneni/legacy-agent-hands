@@ -1,10 +1,10 @@
 /**
  * Provider-agnostic chat/tool-use contract. `src/agent/discover.ts` only
- * talks to this interface — swapping the model backing the discovery loop
- * (Anthropic Claude, a locally-hosted open-weight model via Ollama, or
- * anything else) is a matter of adding one adapter, not touching the loop.
- * The spec is explicit that LLM provider/model is an implementation
- * decision, not a fixed requirement.
+ * talks to this interface, so swapping the model behind the discovery loop
+ * is a matter of adding one adapter rather than touching the loop. The
+ * shipped implementation runs an open-weight model locally through Ollama,
+ * which keeps the system free of API keys and outbound calls; a hosted
+ * provider would be another file implementing this same interface.
  */
 
 export type JsonSchema = {

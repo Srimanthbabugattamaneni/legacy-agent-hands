@@ -20,7 +20,6 @@
     "postinstall": "playwright install chromium"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "express": "^4.21.2",
     "playwright": "^1.49.1",
     "zod": "^3.24.1",

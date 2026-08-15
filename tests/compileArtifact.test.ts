@@ -263,6 +263,28 @@ describe("compileArtifact", () => {
     expect(description).not.toContain("Sam Whitfield");
   });
 
+  it("leaves a repeated click alone, since clicking twice can be meaningful", () => {
+    const locator = {
+      primary: { strategy: "role" as const, role: "button", name: "Next", nameMatch: "exact" as const, nth: 0 },
+      fallbacks: [],
+    };
+    const artifact = compileArtifact({
+      id: "cap_12",
+      name: "paged",
+      description: "test",
+      goal: "test",
+      appId: "mock-bank",
+      entryUrl: "http://localhost:4000/",
+      steps: [
+        record({ id: "s1", action: "click", locator }),
+        record({ id: "s2", action: "click", locator }),
+      ],
+      paramLiterals: {},
+      outputsDeclared: {},
+    });
+    expect(artifact.steps).toHaveLength(2);
+  });
+
   it("collapses consecutive identical extract steps", () => {
     // The shipped recording repeated the same extract three times — model
     // repetition compiled verbatim. Harmless at replay, but noise in an

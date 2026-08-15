@@ -13,28 +13,24 @@ heterogeneity/multi-tenant story, escalation model, safety model, and cuts).
 
 Requirements: Node >= 20.
 
-```bash
-npm install                 # also runs `playwright install chromium` via postinstall
-cp .env.example .env        # then fill in ANTHROPIC_API_KEY, or see "no API key" below
-```
-
-An LLM is only required for `discover` (the real LLM-driven run). `replay` and `catalog` never
-call an LLM and run entirely offline — that's the point of the system.
-
-**No Anthropic API key? No account of any kind needed.** The discovery loop talks to models
-through a small provider interface (`src/agent/llm/`), and the demo evidence in `/evidence` was
-produced entirely with a free, open-weight model running locally via [Ollama](https://ollama.com)
-— no key, no signup, no network egress:
+**There is no API key to obtain, and no account to create.** Everything runs on your machine: the
+discovery run drives a free, open-weight model served locally by [Ollama](https://ollama.com), and
+`replay`/`catalog` never call a model at all — which is the point of the system. Nothing in this
+project makes a network request to a third party.
 
 ```bash
+npm install                  # also runs `playwright install chromium` via postinstall
+cp .env.example .env         # optional — every setting has a working default
+
 brew install ollama          # or see https://ollama.com/download
 brew services start ollama
 ollama pull llama3.1:8b      # ~5GB, tool-calling capable
-npm run discover -- --goal "..." --target ... --name ...   # auto-selects Ollama when no ANTHROPIC_API_KEY is set
 ```
 
-`createProvider()` picks Anthropic when `ANTHROPIC_API_KEY` is set, Ollama otherwise; override
-explicitly with `--provider anthropic|ollama` or `--model <name>` on the `discover` command.
+The model sits behind a small provider interface (`src/agent/llm/`), so `discover.ts` only ever
+calls `provider.step()`. Swapping in a hosted model is a new adapter file, with nothing above it
+changing; [tests/agentLoop.test.ts](tests/agentLoop.test.ts) drives the whole loop against a
+scripted provider to keep that seam honest. Override the model with `--model <name>` on `discover`.
 
 ### The target application
 
@@ -53,7 +49,7 @@ Leave this running in one terminal for everything below.
 
 ## 2. Demo path
 
-### a. Discover a capability (real LLM run)
+### a. Discover a capability (real LLM run, local model)
 
 Read-only lookup:
 
@@ -77,17 +73,16 @@ npm run discover -- \
   --param memberId=20001 --param deposit=100 --max-steps 15
 ```
 
-(The second goal is spelled out step-by-step because the demo evidence in `/evidence` was produced
-with a small local open-weight model — see "No Anthropic API key?" above — which follows explicit,
-concrete instructions more reliably than an open-ended goal. A frontier hosted model handles the
-shorter, more natural phrasing fine.)
+(The second goal is spelled out step by step because an 8B local model follows concrete
+instructions more reliably than an open-ended goal. A larger model handles the shorter phrasing
+fine — the loop is identical either way.)
 
 Re-running `discover` for a name that already exists compares the new recording against the stored
 one: identical behaviour leaves the artifact untouched, changed behaviour bumps `version` and
 archives the previous file to `artifacts/history/<name>.v<N>.json`. `artifacts/<name>.json` is
 always the current version.
 
-By default the browser is visible (`HEADLESS=false`, matching `.env.example`) so you can watch the
+By default the browser is visible (`HEADLESS=false`) so you can watch the
 agent work and, if it escalates, take over the same window. A structured run log (and a
 screenshot) is written to `evidence/discover-<name>-<timestamp>/`; the compiled capability is
 written to `artifacts/<name>.json`.

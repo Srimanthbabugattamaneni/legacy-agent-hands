@@ -136,16 +136,23 @@ export function compileArtifact(opts: {
       description: opts.outputDescriptions?.[name] ?? `Extracted value: ${name}`,
     }));
 
-  // Consecutive identical extracts are model repetition compiled verbatim —
-  // the shipped open-subaccount recording had the same one three times over.
-  // They are harmless at replay (the later ones overwrite the same output key)
-  // but they make an artifact meant to be *reviewed* harder to read.
+  // Models repeat themselves, and the repetition used to compile verbatim —
+  // one recording carried the same extract three times, another selected the
+  // same dropdown value twice. Harmless at replay but noise in an artifact
+  // whose whole purpose is being reviewed.
+  //
+  // Only *idempotent* actions are collapsed. Re-selecting the same option or
+  // re-reading the same cell cannot mean anything; a repeated click or
+  // keypress genuinely might (a stepper, a paginated list), so those are left
+  // exactly as recorded.
+  const IDEMPOTENT: ReadonlySet<string> = new Set(["extract", "select", "fill", "wait_for"]);
   const deduped = opts.steps.filter((s, i) => {
-    if (i === 0 || s.action !== "extract") return true;
+    if (i === 0 || !IDEMPOTENT.has(s.action)) return true;
     const prev = opts.steps[i - 1]!;
     return !(
-      prev.action === "extract" &&
+      prev.action === s.action &&
       prev.extractTo === s.extractTo &&
+      prev.literalValue === s.literalValue &&
       JSON.stringify(prev.locator) === JSON.stringify(s.locator)
     );
   });

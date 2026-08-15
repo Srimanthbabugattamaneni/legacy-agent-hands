@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { ToolSpec } from "../agent/llm/types.js";
 import { CapabilityArtifactSchema, type CapabilityArtifact } from "../schema/artifact.js";
 
 const ARTIFACTS_DIR = path.join(process.cwd(), "artifacts");
@@ -24,8 +24,13 @@ const JSON_TYPE: Record<string, string> = { string: "string", number: "number", 
 
 /** Stretch goal: expose the catalog as a small function-calling surface an
  * AI agent could use to discover and invoke capabilities by name with typed
- * args, generated directly from each artifact's declared inputs/outputs. */
-export function toAgentTools(capabilities: CapabilityArtifact[] = listCapabilities()): Anthropic.Tool[] {
+ * args, generated directly from each artifact's declared inputs/outputs.
+ *
+ * Emitted as our own provider-neutral `ToolSpec` rather than a vendor SDK
+ * type: the shape (name / description / JSON-Schema parameters) is what every
+ * tool-calling API takes, so binding the catalog to one vendor's types would
+ * be a dependency bought for nothing. */
+export function toAgentTools(capabilities: CapabilityArtifact[] = listCapabilities()): ToolSpec[] {
   return capabilities.map((c) => ({
     name: c.name,
     description: `${c.description}\nOutputs: ${c.outputs.map((o) => `${o.name} (${o.type}) - ${o.description}`).join("; ") || "(none)"}`,

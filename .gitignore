@@ -2,6 +2,9 @@ node_modules/
 dist/
 .env
 .env.*
+# ...but the template must ship: README's first setup step copies it, and
+# `.env.*` above was silently excluding it from the repo.
+!.env.example
 *.log
 .DS_Store
 # Evidence screenshots/snapshots are committed as demo artifacts, but keep transient ones out:
