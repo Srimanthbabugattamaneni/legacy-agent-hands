@@ -1,0 +1,10 @@
+{"ts":"2026-08-17T03:13:41.540Z","event":"replay_started","artifactId":"lookup-balance_f1877ea3","version":1,"params":{"memberId":"10234"}}
+{"ts":"2026-08-17T03:13:42.021Z","event":"step_started","stepId":"step_e2f048c3","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
+{"ts":"2026-08-17T03:13:42.095Z","event":"step_succeeded","stepId":"step_e2f048c3"}
+{"ts":"2026-08-17T03:13:42.095Z","event":"step_started","stepId":"step_dca066ef","action":"click","description":"click button \"Search\""}
+{"ts":"2026-08-17T03:13:42.135Z","event":"step_succeeded","stepId":"step_dca066ef"}
+{"ts":"2026-08-17T03:13:42.135Z","event":"step_started","stepId":"step_48e075e3","action":"extract","description":"extract \"savingsBalance\" from cell \"Savings Balance\""}
+{"ts":"2026-08-17T03:13:42.156Z","event":"step_succeeded","stepId":"step_48e075e3"}
+{"ts":"2026-08-17T03:13:42.156Z","event":"step_started","stepId":"step_820cba96","action":"extract","description":"extract \"checkingBalance\" from cell \"Checking Balance\""}
+{"ts":"2026-08-17T03:13:42.160Z","event":"step_succeeded","stepId":"step_820cba96"}
+{"ts":"2026-08-17T03:13:42.190Z","event":"replay_finished","result":{"artifactId":"lookup-balance_f1877ea3","artifactVersion":1,"startedAt":"2026-08-17T03:13:41.540Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-1786936421540","status":"success","outputs":{"savingsBalance":"$4231.09","checkingBalance":"$812.44"},"finishedAt":"2026-08-17T03:13:42.190Z"}}

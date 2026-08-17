@@ -1,0 +1,9 @@
+{"ts":"2026-08-17T03:13:46.455Z","event":"replay_started","artifactId":"open-subaccount_ef8a1c54","version":1,"params":{"memberId":"10234","deposit":"100"}}
+{"ts":"2026-08-17T03:13:46.602Z","event":"step_started","stepId":"step_1135fec0","action":"select","description":"select \"Savings\" in combobox \"Account Type\""}
+{"ts":"2026-08-17T03:13:46.628Z","event":"step_succeeded","stepId":"step_1135fec0"}
+{"ts":"2026-08-17T03:13:46.629Z","event":"step_started","stepId":"step_231d9f22","action":"fill","description":"fill textbox \"Initial Deposit\" with \"{{deposit}}\""}
+{"ts":"2026-08-17T03:13:46.639Z","event":"step_succeeded","stepId":"step_231d9f22"}
+{"ts":"2026-08-17T03:13:46.639Z","event":"step_started","stepId":"step_aec996eb","action":"click","description":"click button \"Continue\""}
+{"ts":"2026-08-17T03:13:46.676Z","event":"step_succeeded","stepId":"step_aec996eb"}
+{"ts":"2026-08-17T03:13:46.676Z","event":"step_started","stepId":"step_e79406de","action":"click","description":"click button \"Confirm & Open Account\""}
+{"ts":"2026-08-17T03:13:46.676Z","event":"replay_finished","result":{"artifactId":"open-subaccount_ef8a1c54","artifactVersion":1,"startedAt":"2026-08-17T03:13:46.455Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786936426455","status":"failure","errorClass":"policy_blocked","stepId":"step_e79406de","expected":"step authorized for effect \"irreversible\"","observed":"not authorized","finishedAt":"2026-08-17T03:13:46.676Z"}}

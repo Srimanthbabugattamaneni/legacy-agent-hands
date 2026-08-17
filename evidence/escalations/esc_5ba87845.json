@@ -1,0 +1,18 @@
+{
+  "id": "esc_5ba87845",
+  "createdAt": "2026-08-17T03:14:08.599Z",
+  "reason": "risky_action_needs_confirmation",
+  "goalOrCapability": "open-subaccount v1",
+  "currentStepDescription": "click button \"Confirm & Open Account\"",
+  "detail": "irreversible step requires explicit allowRisky authorization",
+  "screenshotPath": "/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-open-subaccount-1786936448067/escalation-1786936448563.png",
+  "status": "resolved",
+  "humanNotes": "Checked the review screen against the request ticket: member 10234, Savings, $100 initial deposit. Matches, so the authorization is expected. Approved by an ops reviewer.",
+  "humanActions": [
+    {
+      "at": "2026-08-17T03:14:16.115Z",
+      "description": "operator left the session on http://localhost:4000/members/10234/new-subaccount (\"Srimanth Assignment Bank - Review & Confirm\") — no navigation observed"
+    }
+  ],
+  "resolvedAt": "2026-08-17T03:14:15.669Z"
+}

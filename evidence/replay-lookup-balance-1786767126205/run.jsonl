@@ -1,6 +1,0 @@
-{"ts":"2026-08-15T04:12:06.206Z","event":"replay_started","artifactId":"lookup-balance_38af545d","version":1,"params":{"memberId":"99999"}}
-{"ts":"2026-08-15T04:12:06.346Z","event":"step_started","stepId":"step_e034b777","action":"fill","description":"fill textbox \"Member ID\" with \"{{memberId}}\""}
-{"ts":"2026-08-15T04:12:06.378Z","event":"step_succeeded","stepId":"step_e034b777"}
-{"ts":"2026-08-15T04:12:06.378Z","event":"step_started","stepId":"step_6b6626aa","action":"click","description":"click button \"Search\""}
-{"ts":"2026-08-15T04:12:06.412Z","event":"business_outcome","outcome":"session_timeout","stepId":"step_6b6626aa"}
-{"ts":"2026-08-15T04:12:06.412Z","event":"replay_finished","result":{"artifactId":"lookup-balance_38af545d","artifactVersion":1,"startedAt":"2026-08-15T04:12:06.206Z","evidenceDir":"/Users/srimanthgattamaneni/Desktop/legacy-agent-hands/evidence/replay-lookup-balance-1786767126205","status":"business_outcome","outcome":"session_timeout","detail":"The back-office session expired and requires re-login.","stepId":"step_6b6626aa","finishedAt":"2026-08-15T04:12:06.412Z"}}

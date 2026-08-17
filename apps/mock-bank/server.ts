@@ -35,10 +35,10 @@ function money(n: number): string {
 function layout(title: string, body: string): string {
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Mock Bank Back Office - ${title}</title></head>
+<head><meta charset="utf-8"><title>Srimanth Assignment Bank - ${title}</title></head>
 <body bgcolor="#ffffff">
 <table width="100%" cellpadding="4" cellspacing="0" border="0" bgcolor="#003366">
-  <tr><td><font color="#ffffff" size="4"><b>MERIDIAN CORE BANKING &mdash; Back Office</b></font></td></tr>
+  <tr><td><font color="#ffffff" size="4"><b>SRIMANTH ASSIGNMENT BANK &mdash; Back Office</b></font></td></tr>
 </table>
 <table width="100%" cellpadding="10" cellspacing="0" border="0">
   <tr><td>
